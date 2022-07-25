@@ -1,0 +1,38 @@
+CLASS_NAMES: ['Vehicle', 'Pedestrian', 'Bicycle', 'TrafficCone']
+
+DATA_CONFIG:
+    POINT_CLOUD_RANGE: [-80.0, -80.0, -3, 80.0, 80.0, 3]
+    LOAD_DIM: 5
+    USE_DIM: 4
+    DATA_PROCESSOR:
+        -   NAME: mask_points_and_boxes_outside_range
+            REMOVE_OUTSIDE_BOXES: True
+
+        -   NAME: shuffle_points
+            SHUFFLE_ENABLED: {
+                'train': True,
+                'test': True
+            }
+        
+        -   NAME: transform_points_to_voxels
+            VOXEL_SIZE: [ 0.2, 0.2, 6.0 ]
+            MAX_POINTS_PER_VOXEL: 20
+            MAX_NUMBER_OF_VOXELS: {
+                'train': 56000,
+                'test': 56000
+            }
+MODEL:
+    NAME: 
+
+    DENSE_HEAD:
+        NAME: CenterHead
+
+
+    POST_PROCESSING:
+        NMS_CONFIG:
+            MULTI_CLASSES_NMS: False
+            NMS_TYPE: nms_gpu
+            SCORE_THRESH: 0.1
+            NMS_THRESH: 0.01
+            NMS_PRE_MAXSIZE: 3840 # tensorrt max support 3840
+            NMS_POST_MAXSIZE: 500
