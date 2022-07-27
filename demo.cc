@@ -51,7 +51,6 @@ int Txt2Arrary(float *&points_array, std::string file_name,
 
   InFile.close();
   return temp_points.size() / num_feature;
-  // printf("Done");
 };
 
 int Bin2Arrary(float *&points_array, std::string file_name,
@@ -77,7 +76,6 @@ int Bin2Arrary(float *&points_array, std::string file_name,
 
   InFile.close();
   return size;
-  // printf("Done");
 };
 
 void Boxes2Txt(const std::vector<float> &boxes, 
@@ -124,20 +122,17 @@ void load_anchors(float *&anchor_data, std::string file_name) {
 void test(void) {
   const std::string DB_CONF = "../bootstrap.yaml";
   YAML::Node config = YAML::LoadFile(DB_CONF);
-  // std::string pfe_file, backbone_file;
-  // pfe_file = config["PfeOnnx"].as<std::string>();
-  // backbone_file = config["BackboneOnnx"].as<std::string>();
-  // std::cout << "pfe_file: " << pfe_file << std::endl;
-  // std::cout << "backbone_file: " << backbone_file << std::endl;
-  std::string model_file = config["ModelFile"].as<std::string>();
-  std::cout << "modle_file: " << modle_file << std::endl;
 
-  const std::string model_config = config["ModelConfig"].as<std::string>();
+  std::string pfe_file = config["PfeFile"].as<std::string>();
+  std::string backbone_file = config["BackboneFile"].as<std::string>();
+  std::string model_config = config["ModelConfig"].as<std::string>();
   std::string file_name = config["InputFile"].as<std::string>();
+  std::cout << "pfe_file: " << pfe_file << std::endl;
+  std::cout << "backbone_file: " << backbone_file << std::endl;
   std::cout << "config: " << model_config << std::endl;
   std::cout << "data: " << file_name << std::endl;
 
-  CenterPoint cp(config["UseOnnx"].as<bool>(), model_file, model_config);
+  CenterPoint cp(config["UseOnnx"].as<bool>(), pfe_file, backbone_file, model_config);
 
   float *points_array;
   int in_num_points;

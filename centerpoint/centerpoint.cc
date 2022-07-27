@@ -40,8 +40,8 @@ using std::chrono::duration;
 using std::chrono::high_resolution_clock;
 
 #define ANCHOR_NUM 1314144
-void CenterPoint::InitParams() {
-  YAML::Node params = YAML::LoadFile(pp_config_);
+void CenterPoint::InitParams(const std::string model_config) {
+  YAML::Node params = YAML::LoadFile(model_config);
   kPillarXSize =
       params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["VOXEL_SIZE"][0].as<float>();
   kPillarYSize =
@@ -62,9 +62,7 @@ void CenterPoint::InitParams() {
       params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["MAX_POINTS_PER_VOXEL"]
           .as<int>();
   kNumInputBoxFeature = 7;
-  kNumOutputBoxFeature = params["MODEL"]["DENSE_HEAD"]["TARGET_ASSIGNER_CONFIG"]
-                               ["BOX_CODER_CONFIG"]["code_size"]
-                                   .as<int>();
+  kNumOutputBoxFeature = 7;
   kBatchSize = 1;
   kNmsPreMaxsize =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_PRE_MAXSIZE"]
@@ -72,7 +70,7 @@ void CenterPoint::InitParams() {
   kNmsPostMaxsize =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_POST_MAXSIZE"]
           .as<int>();
-  kVfeChannels = 64;
+  kPfeChannels = kNumThreads;
   score_threshold_ =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["SCORE_THRESH"]
           .as<float>();
@@ -87,17 +85,14 @@ void CenterPoint::InitParams() {
       static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize);  // 800
   kGridZSize = static_cast<int>((kMaxZRange - kMinZRange) / kPillarZSize);  // 1
   assert(1 == kGridZSize);
-  kRpnInputSize = kVfeChannels * kGridYSize * kGridXSize;
+  kRpnInputSize = kPfeChannels * kGridYSize * kGridXSize;
 }
 
-
-CenterPoint::CenterPoint(const bool use_onnx, const std::string model_file,
-                         const std::string model_config)
-    : use_onnx_(use_onnx),
-      model_file_(model_file),
-      model_config_(model_config) {
-  InitParams();
-  InitTRT(use_onnx_);
+CenterPoint::CenterPoint(const bool use_onnx, const std::string pfe_file,
+                         const std::string backbone_file,
+                         const std::string model_config) {
+  InitParams(model_config);
+  InitTRT(use_onnx, pfe_file, backbone_file);
   DeviceMemoryMalloc();
 
   preprocess_points_cuda_ptr_.reset(new PreprocessPointsCuda(
@@ -107,7 +102,7 @@ CenterPoint::CenterPoint(const bool use_onnx, const std::string model_file,
       kMaxZRange));
 
   scatter_cuda_ptr_.reset(
-      new ScatterCuda(kVfeChannels, kGridXSize, kGridYSize));
+      new ScatterCuda(kPfeChannels, kGridXSize, kGridYSize));
 
   const float float_min = std::numeric_limits<float>::lowest();
   const float float_max = std::numeric_limits<float>::max();
@@ -118,7 +113,7 @@ CenterPoint::CenterPoint(const bool use_onnx, const std::string model_file,
 }
 
 void CenterPoint::DeviceMemoryMalloc() {
-  // for pillars
+  // voxelize
   GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_num_points_per_pillar_),
                        kMaxNumPillars * sizeof(float)));  // M
   GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_pillar_point_feature_),
@@ -130,25 +125,21 @@ void CenterPoint::DeviceMemoryMalloc() {
   GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_pfe_gather_feature_),
                        kMaxNumPillars * kMaxNumPointsPerPillar *
                            kNumGatherPointFeature * sizeof(float)));
-  // for trt inference
-  // create GPU buffers and a stream
+  // pillar feature encoder
   GPU_CHECK(
       cudaMalloc(&pfe_buffers_[0], kMaxNumPillars * kMaxNumPointsPerPillar *
                                        kNumGatherPointFeature * sizeof(float)));
   GPU_CHECK(cudaMalloc(&pfe_buffers_[1],
-                       kMaxNumPillars * kVfeChannels * sizeof(float)));
-
-  GPU_CHECK(cudaMalloc(
-      &rpn_buffers_[0],
-      (kRpnInputSize + ANCHOR_NUM * kNumAnchorSize) * sizeof(float)));
-  GPU_CHECK(cudaMalloc(&rpn_buffers_[2],
-                       kNmsPreMaxsize * kNumOutputBoxFeature * sizeof(float)));
+                       kMaxNumPillars * kPfeChannels * sizeof(float)));
+  // scatter
+  GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_scattered_feature_),
+                       kPfeChannels * kGridYSize * kGridXSize * sizeof(float)));
+  // backbone
+  GPU_CHECK(cudaMalloc(&rpn_buffers_[0], kRpnInputSize * sizeof(float)));
   GPU_CHECK(
       cudaMalloc(&rpn_buffers_[1], kNmsPreMaxsize * kNumClass * sizeof(float)));
-
-  // for scatter kernel
-  GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_scattered_feature_),
-                       kNumThreads * kGridYSize * kGridXSize * sizeof(float)));
+  GPU_CHECK(cudaMalloc(&rpn_buffers_[2],
+                       kNmsPreMaxsize * kNumOutputBoxFeature * sizeof(float)));
 
   // for filter
   host_box_ = new float[kNmsPreMaxsize * kNumClass * kNumOutputBoxFeature]();
@@ -156,36 +147,7 @@ void CenterPoint::DeviceMemoryMalloc() {
   host_filtered_count_ = new int[kNumClass]();
 }
 
-CenterPoint::~CenterPoint() {
-  // GPU_CHECK(cudaFree(dev_anchors_));
-  // for pillars
-  GPU_CHECK(cudaFree(dev_num_points_per_pillar_));
-  GPU_CHECK(cudaFree(dev_pillar_point_feature_));
-  GPU_CHECK(cudaFree(dev_pillar_coors_));
-  // for pfe forward
-  GPU_CHECK(cudaFree(dev_pfe_gather_feature_));
-
-  GPU_CHECK(cudaFree(pfe_buffers_[0]));
-  GPU_CHECK(cudaFree(pfe_buffers_[1]));
-
-  GPU_CHECK(cudaFree(rpn_buffers_[0]));
-  GPU_CHECK(cudaFree(rpn_buffers_[1]));
-  GPU_CHECK(cudaFree(rpn_buffers_[2]));
-
-  pfe_context_->destroy();
-  backbone_context_->destroy();
-  pfe_engine_->destroy();
-  backbone_engine_->destroy();
-  // for post process
-  GPU_CHECK(cudaFree(dev_scattered_feature_));
-  delete[] host_box_;
-  delete[] host_score_;
-  delete[] host_filtered_count_;
-}
-
 void CenterPoint::SetDeviceMemoryToZero() {
-  voxel_num_ = 0;
-
   GPU_CHECK(cudaMemset(dev_num_points_per_pillar_, 0,
                        kMaxNumPillars * sizeof(float)));
   GPU_CHECK(cudaMemset(dev_pillar_point_feature_, 0,
@@ -200,26 +162,26 @@ void CenterPoint::SetDeviceMemoryToZero() {
                        kMaxNumPillars * kMaxNumPointsPerPillar *
                            kNumGatherPointFeature * sizeof(float)));
   GPU_CHECK(cudaMemset(pfe_buffers_[1], 0,
-                       kMaxNumPillars * kVfeChannels * sizeof(float)));
-  GPU_CHECK(cudaMemset(
-      rpn_buffers_[0], 0,
-      (kRpnInputSize + ANCHOR_NUM * kNumAnchorSize) * sizeof(float)));
-  GPU_CHECK(cudaMemset(rpn_buffers_[2], 0,
-                       kNmsPreMaxsize * kNumOutputBoxFeature * sizeof(float)));
+                       kMaxNumPillars * kPfeChannels * sizeof(float)));
+  
+  GPU_CHECK(cudaMemset(dev_scattered_feature_, 0,
+                       kPfeChannels * kGridYSize * kGridXSize * sizeof(float)));
+  
+  GPU_CHECK(cudaMemset(rpn_buffers_[0], 0, kRpnInputSize * sizeof(float)));
   GPU_CHECK(cudaMemset(rpn_buffers_[1], 0,
                        kNmsPreMaxsize * kNumClass * sizeof(float)));
-  GPU_CHECK(cudaMemset(dev_scattered_feature_, 0,
-                       kNumThreads * kGridYSize * kGridXSize * sizeof(float)));
+  GPU_CHECK(cudaMemset(rpn_buffers_[2], 0,
+                       kNmsPreMaxsize * kNumOutputBoxFeature * sizeof(float)));
 }
 
-void CenterPoint::InitTRT(const bool use_onnx) {
-  if (use_onnx_) {
-    // create a TensorRT model from the onnx model and load it into an engine
-    OnnxToTRTModel(pfe_file_, &pfe_engine_);
-    OnnxToTRTModel(backbone_file_, &backbone_engine_);
+void CenterPoint::InitTRT(const bool use_onnx, const std::string pfe_file,
+                          const std::string backbone_file) {
+  if (use_onnx) {
+    OnnxToTRTModel(pfe_file, &pfe_engine_);
+    OnnxToTRTModel(backbone_file, &backbone_engine_);
   } else {
-    EngineToTRTModel(pfe_file_, &pfe_engine_);
-    EngineToTRTModel(backbone_file_, &backbone_engine_);
+    EngineToTRTModel(pfe_file, &pfe_engine_);
+    EngineToTRTModel(backbone_file, &backbone_engine_);
   }
   if (pfe_engine_ == nullptr || backbone_engine_ == nullptr) {
     std::cerr << "Failed to load ONNX file.";
@@ -327,7 +289,7 @@ void CenterPoint::OnnxToTRTModel(
 }
 
 void CenterPoint::EngineToTRTModel(const std::string &engine_file,
-                                    nvinfer1::ICudaEngine **engine_ptr) {
+                                   nvinfer1::ICudaEngine **engine_ptr) {
   int verbosity = static_cast<int>(nvinfer1::ILogger::Severity::kWARNING);
   std::stringstream gieModelStream;
   gieModelStream.seekg(0, gieModelStream.beg);
@@ -367,10 +329,10 @@ void CenterPoint::EngineToTRTModel(const std::string &engine_file,
 }
 
 void CenterPoint::DoInference(const float *in_points_array,
-                               const int in_num_points,
-                               std::vector<float> *out_detections,
-                               std::vector<int> *out_labels,
-                               std::vector<float> *out_scores) {
+                              const int in_num_points,
+                              std::vector<float> *out_detections,
+                              std::vector<int> *out_labels,
+                              std::vector<float> *out_scores) {
   SetDeviceMemoryToZero();
   cudaDeviceSynchronize();
   // [STEP 1] : load pointcloud
@@ -410,7 +372,7 @@ void CenterPoint::DoInference(const float *in_points_array,
   cudaDeviceSynchronize();
   auto pfe_end = high_resolution_clock::now();
   // DEVICE_SAVE<float>(reinterpret_cast<float *>(pfe_buffers_[1]),
-  //                    kMaxNumPillars * kVfeChannels,
+  //                    kMaxNumPillars * kPfeChannels,
   //                    "1_Model_pfe_output_buffers_[1]");
 
   // [STEP 4] : scatter pillar feature
@@ -425,24 +387,20 @@ void CenterPoint::DoInference(const float *in_points_array,
 
   // [STEP 5] : backbone forward
   auto backbone_start = high_resolution_clock::now();
-  GPU_CHECK(cudaMemcpyAsync(rpn_buffers_[0], dev_scattered_feature_,
-                            kBatchSize * kRpnInputSize * sizeof(float),
-                            cudaMemcpyDeviceToDevice, stream));
-  GPU_CHECK(cudaMemcpyAsync(
-      (uint8_t *)rpn_buffers_[0] + kBatchSize * kRpnInputSize * sizeof(float),
-      dev_anchors_, ANCHOR_NUM * kNumAnchorSize * sizeof(float),
-      cudaMemcpyDeviceToDevice, stream));
-  backbone_context_->enqueueV2(rpn_buffers_, stream, nullptr);
-  cudaDeviceSynchronize();
+  // GPU_CHECK(cudaMemcpyAsync(rpn_buffers_[0], dev_scattered_feature_,
+  //                           kBatchSize * kRpnInputSize * sizeof(float),
+  //                           cudaMemcpyDeviceToDevice, stream));
+  // backbone_context_->enqueueV2(rpn_buffers_, stream, nullptr);
+  // cudaDeviceSynchronize();
   auto backbone_end = high_resolution_clock::now();
 
   // [STEP 6]: postprocess (multihead)
   auto postprocess_start = high_resolution_clock::now();
-  postprocess_cuda_ptr_->DoPostprocessCuda(
-      reinterpret_cast<float *>(rpn_buffers_[2]),  // [bboxes]
-      reinterpret_cast<float *>(rpn_buffers_[1]),  // [scores]
-      host_box_, host_score_, host_filtered_count_, *out_detections,
-      *out_labels, *out_scores);
+  // postprocess_cuda_ptr_->DoPostprocessCuda(
+  //     reinterpret_cast<float *>(rpn_buffers_[2]),  // [bboxes]
+  //     reinterpret_cast<float *>(rpn_buffers_[1]),  // [scores]
+  //     host_box_, host_score_, host_filtered_count_, *out_detections,
+  //     *out_labels, *out_scores);
   // cudaDeviceSynchronize();
   auto postprocess_end = high_resolution_clock::now();
 
@@ -472,4 +430,30 @@ void CenterPoint::DoInference(const float *in_points_array,
 
   cudaStreamDestroy(stream);
   GPU_CHECK(cudaFree(dev_points));
+}
+
+CenterPoint::~CenterPoint() {
+  // for pillars
+  GPU_CHECK(cudaFree(dev_num_points_per_pillar_));
+  GPU_CHECK(cudaFree(dev_pillar_point_feature_));
+  GPU_CHECK(cudaFree(dev_pillar_coors_));
+  // for pfe forward
+  GPU_CHECK(cudaFree(dev_pfe_gather_feature_));
+
+  GPU_CHECK(cudaFree(pfe_buffers_[0]));
+  GPU_CHECK(cudaFree(pfe_buffers_[1]));
+
+  GPU_CHECK(cudaFree(rpn_buffers_[0]));
+  GPU_CHECK(cudaFree(rpn_buffers_[1]));
+  GPU_CHECK(cudaFree(rpn_buffers_[2]));
+
+  pfe_context_->destroy();
+  backbone_context_->destroy();
+  pfe_engine_->destroy();
+  backbone_engine_->destroy();
+  // for post process
+  GPU_CHECK(cudaFree(dev_scattered_feature_));
+  delete[] host_box_;
+  delete[] host_score_;
+  delete[] host_filtered_count_;
 }

@@ -66,7 +66,6 @@ class Logger : public nvinfer1::ILogger {
   void log(Severity severity, const char *msg) noexcept override {
     // suppress messages with severity enum value greater than the reportable
     if (severity > reportable_severity) return;
-
     switch (severity) {
       case Severity::kINTERNAL_ERROR:
         std::cerr << "INTERNAL_ERROR: ";
@@ -91,12 +90,36 @@ class Logger : public nvinfer1::ILogger {
 };
 
 class CenterPoint {
+ public:
+  CenterPoint(const bool use_onnx, const std::string pfe_file,
+              const std::string backbone_file, const std::string model_config);
+
+  ~CenterPoint();
+
+  void DoInference(const float *in_points_array, const int in_num_points,
+                   std::vector<float> *out_detections,
+                   std::vector<int> *out_labels,
+                   std::vector<float> *out_scores);
+
  private:
-  // initialize in initializer list
-  const bool use_onnx_;
-  const std::string model_file_;
-  const std::string model_config_;
-  // end initializer list
+  void DeviceMemoryMalloc();
+
+  void SetDeviceMemoryToZero();
+
+  void InitParams(const std::string model_config);
+
+  void InitTRT(const bool use_onnx, const std::string pfe_file,
+               const std::string backbone_file);
+
+  void OnnxToTRTModel(const std::string &model_file,
+                      nvinfer1::ICudaEngine **engine_ptr);
+
+  void EngineToTRTModel(const std::string &engine_file,
+                        nvinfer1::ICudaEngine **engine_ptr);
+
+  void Preprocess(const float *in_points_array, const int in_num_points);
+
+ private:
   // voxel size
   float kPillarXSize;
   float kPillarYSize;
@@ -116,28 +139,20 @@ class CenterPoint {
   int kNumAnchorSize = 7;
   // if you need to change this, watch the gather_point_feature_kernel func in
   // preprocess
+  int kNumThreads = 64; // also used for number of scattered feature
   int kNumGatherPointFeature = 10;
   int kGridXSize;
   int kGridYSize;
   int kGridZSize;
-  int kVfeChannels;
+  int kPfeChannels;
   int kRpnInputSize;
   int kNumInputBoxFeature;
   int kNumOutputBoxFeature;
   int kBatchSize;
-  int kNumThreads = 64;
   int kNumBoxCorners = 8;
   int kNmsPreMaxsize;
   int kNmsPostMaxsize;
 
-  std::vector<float> anchor_sizes_;
-  std::vector<float> anchor_bottom_heights_;
-  std::vector<float> anchor_rotations_;
-  // std::vector<float> anchors_;
-
-  int voxel_num_;
-  // anchor
-  // float *dev_anchors_;
   // preprocess
   int host_pillar_count_[1];
   float *dev_num_points_per_pillar_;
@@ -166,85 +181,4 @@ class CenterPoint {
   nvinfer1::ICudaEngine *backbone_engine_;
   nvinfer1::IExecutionContext *pfe_context_;
   nvinfer1::IExecutionContext *backbone_context_;
-
-  /**
-   * @brief Memory allocation for device memory
-   * @details Called in the constructor
-   */
-  void DeviceMemoryMalloc();
-
-  /**
-   * @brief Memory set to 0 for device memory
-   * @details Called in the DoInference
-   */
-  void SetDeviceMemoryToZero();
-
-  /**
-   * @brief Initializing paraments from centerpoint.yaml
-   * @details Called in the constructor
-   */
-  void InitParams();
-  /**
-   * @brief Generate Anchors
-   * @details Called in the constructor
-   */
-  void GenerateAnchors();
-  /**
-   * @brief Initializing TensorRT instances
-   * @param[in] usr_onnx_ if true, parse ONNX
-   * @details Called in the constructor
-   */
-  void InitTRT(const bool use_onnx);
-  /**
-   * @brief Convert ONNX to TensorRT model
-   * @param[in] model_file ONNX model file path
-   * @param[out] engine_ptr TensorRT model engine made out of ONNX model
-   * @details Load ONNX model, and convert it to TensorRT model
-   */
-  void OnnxToTRTModel(const std::string &model_file,
-                      nvinfer1::ICudaEngine **engine_ptr);
-
-  /**
-   * @brief Convert Engine to TensorRT model
-   * @param[in] model_file Engine(TensorRT) model file path
-   * @param[out] engine_ptr TensorRT model engine made
-   * @details Load Engine model, and convert it to TensorRT model
-   */
-  void EngineToTRTModel(const std::string &engine_file,
-                        nvinfer1::ICudaEngine **engine_ptr);
-
-  /**
-   * @brief Preproces points
-   * @param[in] in_points_array Point cloud array
-   * @param[in] in_num_points Number of points
-   * @details Call CPU or GPU preprocess
-   */
-  void Preprocess(const float *in_points_array, const int in_num_points);
-
- public:
-  /**
-   * @brief Constructor
-   * @param[in] score_threshold Score threshold for filtering output
-   * @param[in] nms_overlap_threshold IOU threshold for NMS
-   * @param[in] use_onnx if true,using onnx file ,else using engine file
-   * @param[in] pfe_file Pillar Feature Extractor ONNX file path
-   * @param[in] rpn_file Region Proposal Network ONNX file path
-   * @details Variables could be changed through point_pillars_detection
-   */
-  CenterPoint(const bool use_onnx, const std::string pfe_file,
-               const std::string rpn_file, const std::string pp_config);
-  ~CenterPoint();
-
-  /**
-   * @brief Call CenterPoint for the inference
-   * @param[in] in_points_array Point cloud array
-   * @param[in] in_num_points Number of points
-   * @param[out] out_detections Network output bounding box
-   * @param[out] out_labels Network output object's label
-   * @details This is an interface for the algorithm
-   */
-  void DoInference(const float *in_points_array, const int in_num_points,
-                   std::vector<float> *out_detections,
-                   std::vector<int> *out_labels,
-                   std::vector<float> *out_scores);
 };

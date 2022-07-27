@@ -1,9 +1,9 @@
 LoadDim: 5
 UseDim: 4
-UseOnnx: True
 
-ModelFile: /workspace/code/MMDet3d-CenterPoint/model/cp_pillar02_80m_hesai90_80e.onnx
-# BackboneOnnx: /workspace/code/MMDet3d-CenterPoint/model/pts_backbone.onnx
+UseOnnx: True
+PfeFile: /workspace/code/MMDet3d-CenterPoint/model/pfe.onnx
+BackboneFile: /workspace/code/MMDet3d-CenterPoint/model/backbone.onnx
 
 ModelConfig: /workspace/code/MMDet3d-CenterPoint/cfgs/centerpoint_pillar02_secfpn_cyclic_aicv.yaml
 
