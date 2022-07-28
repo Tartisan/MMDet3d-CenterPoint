@@ -145,7 +145,7 @@ class CenterPoint {
   int kGridYSize;
   int kGridZSize;
   int kPfeChannels;
-  int kRpnInputSize;
+  int kBackboneInputSize;
   int kNumInputBoxFeature;
   int kNumOutputBoxFeature;
   int kBatchSize;
@@ -164,7 +164,9 @@ class CenterPoint {
   // scatter
   float *dev_scattered_feature_;
   // backbone
-  void *rpn_buffers_[3];
+  int kHeadXSize;
+  int kHeadYSize;
+  void *backbone_buffers_[4];
   // postprocess
   float score_threshold_;
   float nms_overlap_threshold_;

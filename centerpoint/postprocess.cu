@@ -30,28 +30,8 @@
  * limitations under the License.
  */
 
-/**
- * @author Kosuke Murakami
- * @date 2019/02/26
- */
-
-/**
- * @author Yan haixu
- * Contact: just github.com/hova88
- * @date 2021/04/30
- */
-
-/**
- * @author Ye xiubo
- * Contact:github.com/speshowBUAA
- * @date 2022/01/05
- */
-
-// headers in CUDA
-#include <thrust/sort.h>
-
-// headers in local files
 #include <stdio.h>
+#include <thrust/sort.h>
 
 #include "common.h"
 #include "postprocess.h"
@@ -62,6 +42,7 @@ void swap_warp(T& a, T& b, T& swp) {
   a = b;
   b = swp;
 }
+
 void quicksort_warp(float* score, int* index, int start, int end) {
   if (start >= end) return;
   float pivot = score[end];
@@ -151,7 +132,7 @@ void PostprocessCuda::DoPostprocessCuda(const float* box_preds,
         host_filtered_count[class_idx] += 1;
       }
     }
-    // printf("host_filter_count[%d] = %d\n", 
+    // printf("host_filter_count[%d] = %d\n",
     //        class_idx, host_filtered_count[class_idx]);
     if (host_filtered_count[class_idx] <= 0) continue;
 

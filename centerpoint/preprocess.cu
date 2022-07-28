@@ -240,8 +240,7 @@ __global__ void gather_point_feature_kernel(
     float* dev_points_mean, float* dev_pfe_gather_feature_) {
   int ith_pillar = blockIdx.x;
   int ith_point = threadIdx.x;
-  // int kNumPointFeature = 5;
-  // int num_gather_feature = 11;   // multihead_pp 是11
+
   int num_gather_feature = 10;  // mmdet3d 是10
   int num_points_at_this_pillar = dev_num_points_per_pillar[ith_pillar];
 
@@ -435,9 +434,8 @@ void PreprocessPointsCuda::DoPreprocessPointsCuda(
                        cudaMemcpyDeviceToHost));
   std::cout << "find pillar num: " << host_pillar_count[0] << std::endl;
 
-  dim3 mean_block(max_points_per_pillar_, 3);  //(32,3)
-  pillar_mean_kernel<<<host_pillar_count[0], mean_block,
-                       64 * 3 * sizeof(float)>>>(
+  dim3 mean_block(max_points_per_pillar_, 3);
+  pillar_mean_kernel<<<host_pillar_count[0], mean_block, 64*3*sizeof(float)>>>(
       dev_points_mean_, num_point_feature_, dev_pillar_point_feature,
       dev_num_points_per_pillar, max_num_pillars_, max_points_per_pillar_);
 

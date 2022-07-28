@@ -82,7 +82,7 @@ inline void GPUAssert(cudaError_t code, const char *file, int line,
 
 template <typename T>
 void HOST_SAVE(T *array, int size, string filename,
-               string root = "../test/result", string postfix = ".txt") {
+               string root = "../", string postfix = ".txt") {
   string filepath = root + "/" + filename + postfix;
   if (postfix == ".bin") {
     fstream file(filepath, ios::out | ios::binary);
@@ -103,7 +103,7 @@ void HOST_SAVE(T *array, int size, string filename,
 
 template <typename T>
 void DEVICE_SAVE(T *array, int size, string filename,
-                 string root = "./test/result", string postfix = ".txt") {
+                 string root = "../", string postfix = ".txt") {
   T *temp_ = new T[size];
   cudaMemcpy(temp_, array, size * sizeof(T), cudaMemcpyDeviceToHost);
   HOST_SAVE<T>(temp_, size, filename, root, postfix);

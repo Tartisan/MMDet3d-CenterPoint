@@ -85,7 +85,11 @@ void CenterPoint::InitParams(const std::string model_config) {
       static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize);  // 800
   kGridZSize = static_cast<int>((kMaxZRange - kMinZRange) / kPillarZSize);  // 1
   assert(1 == kGridZSize);
-  kRpnInputSize = kPfeChannels * kGridYSize * kGridXSize;
+  kBackboneInputSize = kPfeChannels * kGridYSize * kGridXSize;
+
+  int downsample_ratio = 4;
+  kHeadXSize = kGridXSize / downsample_ratio;
+  kHeadYSize = kGridYSize / downsample_ratio;
 }
 
 CenterPoint::CenterPoint(const bool use_onnx, const std::string pfe_file,
@@ -135,11 +139,17 @@ void CenterPoint::DeviceMemoryMalloc() {
   GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_scattered_feature_),
                        kPfeChannels * kGridYSize * kGridXSize * sizeof(float)));
   // backbone
-  GPU_CHECK(cudaMalloc(&rpn_buffers_[0], kRpnInputSize * sizeof(float)));
   GPU_CHECK(
-      cudaMalloc(&rpn_buffers_[1], kNmsPreMaxsize * kNumClass * sizeof(float)));
-  GPU_CHECK(cudaMalloc(&rpn_buffers_[2],
-                       kNmsPreMaxsize * kNumOutputBoxFeature * sizeof(float)));
+      cudaMalloc(&backbone_buffers_[0], kBackboneInputSize * sizeof(float)));
+  /// bbox_preds
+  GPU_CHECK(cudaMalloc(&backbone_buffers_[1],
+                       18 * kHeadXSize * kHeadYSize * sizeof(float)));
+  /// scores
+  GPU_CHECK(cudaMalloc(&backbone_buffers_[2],
+                       4 * kHeadXSize * kHeadYSize * sizeof(float)));
+  /// dir_scores
+  GPU_CHECK(cudaMalloc(&backbone_buffers_[3],
+                       6 * kHeadXSize * kHeadYSize * sizeof(float)));
 
   // for filter
   host_box_ = new float[kNmsPreMaxsize * kNumClass * kNumOutputBoxFeature]();
@@ -163,15 +173,18 @@ void CenterPoint::SetDeviceMemoryToZero() {
                            kNumGatherPointFeature * sizeof(float)));
   GPU_CHECK(cudaMemset(pfe_buffers_[1], 0,
                        kMaxNumPillars * kPfeChannels * sizeof(float)));
-  
+
   GPU_CHECK(cudaMemset(dev_scattered_feature_, 0,
                        kPfeChannels * kGridYSize * kGridXSize * sizeof(float)));
-  
-  GPU_CHECK(cudaMemset(rpn_buffers_[0], 0, kRpnInputSize * sizeof(float)));
-  GPU_CHECK(cudaMemset(rpn_buffers_[1], 0,
-                       kNmsPreMaxsize * kNumClass * sizeof(float)));
-  GPU_CHECK(cudaMemset(rpn_buffers_[2], 0,
-                       kNmsPreMaxsize * kNumOutputBoxFeature * sizeof(float)));
+
+  GPU_CHECK(
+      cudaMemset(backbone_buffers_[0], 0, kBackboneInputSize * sizeof(float)));
+  GPU_CHECK(cudaMemset(backbone_buffers_[1], 0,
+                       18 * kHeadXSize * kHeadYSize * sizeof(float)));
+  GPU_CHECK(cudaMemset(backbone_buffers_[2], 0,
+                       4 * kHeadXSize * kHeadYSize * sizeof(float)));
+  GPU_CHECK(cudaMemset(backbone_buffers_[3], 0,
+                       6 * kHeadXSize * kHeadYSize * sizeof(float)));
 }
 
 void CenterPoint::InitTRT(const bool use_onnx, const std::string pfe_file,
@@ -382,23 +395,25 @@ void CenterPoint::DoInference(const float *in_points_array,
                                    dev_scattered_feature_);
   cudaDeviceSynchronize();
   auto scatter_end = high_resolution_clock::now();
-  // DEVICE_SAVE<float>(dev_scattered_feature_, kRpnInputSize,
+  // DEVICE_SAVE<float>(dev_scattered_feature_, kBackboneInputSize,
   //                    "2_Model_backbone_input_dev_scattered_feature");
 
   // [STEP 5] : backbone forward
   auto backbone_start = high_resolution_clock::now();
-  // GPU_CHECK(cudaMemcpyAsync(rpn_buffers_[0], dev_scattered_feature_,
-  //                           kBatchSize * kRpnInputSize * sizeof(float),
-  //                           cudaMemcpyDeviceToDevice, stream));
-  // backbone_context_->enqueueV2(rpn_buffers_, stream, nullptr);
-  // cudaDeviceSynchronize();
+  GPU_CHECK(cudaMemcpyAsync(backbone_buffers_[0], dev_scattered_feature_,
+                            kBatchSize * kBackboneInputSize * sizeof(float),
+                            cudaMemcpyDeviceToDevice, stream));
+  backbone_context_->enqueueV2(backbone_buffers_, stream, nullptr);
+  cudaDeviceSynchronize();
   auto backbone_end = high_resolution_clock::now();
+  // DEVICE_SAVE<float>((float *)backbone_buffers_[3], 6 * kHeadXSize * kHeadYSize,
+  //                    "00_dir_scores");
 
   // [STEP 6]: postprocess (multihead)
   auto postprocess_start = high_resolution_clock::now();
   // postprocess_cuda_ptr_->DoPostprocessCuda(
-  //     reinterpret_cast<float *>(rpn_buffers_[2]),  // [bboxes]
-  //     reinterpret_cast<float *>(rpn_buffers_[1]),  // [scores]
+  //     reinterpret_cast<float *>(backbone_buffers_[2]),  // [bboxes]
+  //     reinterpret_cast<float *>(backbone_buffers_[1]),  // [scores]
   //     host_box_, host_score_, host_filtered_count_, *out_detections,
   //     *out_labels, *out_scores);
   // cudaDeviceSynchronize();
@@ -443,9 +458,9 @@ CenterPoint::~CenterPoint() {
   GPU_CHECK(cudaFree(pfe_buffers_[0]));
   GPU_CHECK(cudaFree(pfe_buffers_[1]));
 
-  GPU_CHECK(cudaFree(rpn_buffers_[0]));
-  GPU_CHECK(cudaFree(rpn_buffers_[1]));
-  GPU_CHECK(cudaFree(rpn_buffers_[2]));
+  GPU_CHECK(cudaFree(backbone_buffers_[0]));
+  GPU_CHECK(cudaFree(backbone_buffers_[1]));
+  GPU_CHECK(cudaFree(backbone_buffers_[2]));
 
   pfe_context_->destroy();
   backbone_context_->destroy();
