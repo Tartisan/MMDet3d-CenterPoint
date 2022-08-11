@@ -51,22 +51,22 @@ class PreprocessPointsCuda {
                               float* dev_pfe_gather_feature);
 
  private:
-  const int num_threads_;
-  const int max_num_pillars_;
-  const int max_points_per_pillar_;
-  const int num_point_feature_;
-  const int grid_x_size_;
-  const int grid_y_size_;
-  const int grid_z_size_;
-  const float pillar_x_size_;
-  const float pillar_y_size_;
-  const float pillar_z_size_;
-  const float min_x_range_;
-  const float min_y_range_;
-  const float min_z_range_;
-  const float max_x_range_;
-  const float max_y_range_;
-  const float max_z_range_;
+  const int kNumThreads_;
+  const int kMaxNumPillars_;
+  const int kMaxNumPointsPerPillar_;
+  const int kNumPointFeature_;
+  const int kGridXSize_;
+  const int kGridYSize_;
+  const int kGridZSize_;
+  const float kPillarXSize_;
+  const float kPillarYSize_;
+  const float kPillarZSize_;
+  const float kMinXRange_;
+  const float kMinYRange_;
+  const float kMinZRange_;
+  const float kMaxXRange_;
+  const float kMaxYRange_;
+  const float kMaxZRange_;
 
   float* dev_pillar_point_feature_in_coors_;
   int* mask_;

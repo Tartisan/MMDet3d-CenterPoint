@@ -35,18 +35,6 @@
  * @date 2019/02/26
  */
 
-/**
- * @author Yan haixu
- * Contact: just github.com/hova88
- * @date 2021/04/30
- */
-
-/**
- * @author Ye xiubo
- * Contact:github.com/speshowBUAA
- * @date 2022/01/05
- */
-
 #pragma once
 
 // headers in STL
@@ -62,9 +50,9 @@
 
 using namespace std;
 // using MACRO to allocate memory inside CUDA kernel
-#define NUM_3D_BOX_CORNERS_MACRO 8
-#define NUM_2D_BOX_CORNERS_MACRO 4
-#define NUM_THREADS_MACRO 64  // need to be changed when num_threads_ is changed
+#define NUM_3D_BOX_CORNERS 8
+#define NUM_2D_BOX_CORNERS 4
+#define NUM_THREADS 64  // need to be changed when num_threads_ is changed
 
 #define DIVUP(m, n) ((m) / (n) + ((m) % (n) > 0))
 

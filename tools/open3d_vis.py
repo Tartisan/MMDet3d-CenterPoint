@@ -61,7 +61,7 @@ def _draw_bboxes(bbox3d,
                  vis,
                  points_colors,
                  pcd=None,
-                 bbox_color=(0, 1, 0),
+                 bbox_color=(0, 0, 1),
                  points_in_box_color=(1, 0, 0),
                  rot_axis=2,
                  center_mode='lidar_bottom',
@@ -76,7 +76,7 @@ def _draw_bboxes(bbox3d,
         pcd (:obj:`open3d.geometry.PointCloud`, optional): point cloud.
             Default: None.
         bbox_color (tuple[float], optional): the color of bbox.
-            Default: (0, 1, 0).
+            Default: (0, 0, 1).
         points_in_box_color (tuple[float], optional):
             the color of points inside bbox3d. Default: (1, 0, 0).
         rot_axis (int, optional): rotation axis of bbox. Default: 2.
@@ -142,7 +142,7 @@ def show_pts_boxes(points,
                    save_path=None,
                    points_size=2,
                    point_color=(0.5, 0.5, 0.5),
-                   bbox_color=(0, 1, 0),
+                   bbox_color=(0, 0, 1),
                    points_in_box_color=(1, 0, 0),
                    rot_axis=2,
                    center_mode='lidar_bottom',
@@ -164,7 +164,7 @@ def show_pts_boxes(points,
         point_color (tuple[float], optional): the color of points.
             Default: (0.5, 0.5, 0.5).
         bbox_color (tuple[float], optional): the color of bbox.
-            Default: (0, 1, 0).
+            Default: (0, 0, 1).
         points_in_box_color (tuple[float], optional):
             the color of points which are in bbox3d. Default: (1, 0, 0).
         rot_axis (int, optional): rotation axis of bbox. Default: 2.
@@ -207,7 +207,7 @@ def add_pts_boxes(vis,
                   bbox3d=None,
                   points_size=2,
                   point_color=(0.5, 0.5, 0.5),
-                  bbox_color=(0, 1, 0),
+                  bbox_color=(0, 0, 1),
                   points_in_box_color=(1, 0, 0),
                   rot_axis=2,
                   center_mode='lidar_bottom',
@@ -229,7 +229,7 @@ def _draw_bboxes_ind(bbox3d,
                      indices,
                      points_colors,
                      pcd=None,
-                     bbox_color=(0, 1, 0),
+                     bbox_color=(0, 0, 1),
                      points_in_box_color=(1, 0, 0),
                      rot_axis=2,
                      center_mode='lidar_bottom',
@@ -247,7 +247,7 @@ def _draw_bboxes_ind(bbox3d,
         pcd (:obj:`open3d.geometry.PointCloud`, optional): point cloud.
             Default: None.
         bbox_color (tuple[float], optional): the color of bbox.
-            Default: (0, 1, 0).
+            Default: (0, 0, 1).
         points_in_box_color (tuple[float], optional):
             the color of points which are in bbox3d. Default: (1, 0, 0).
         rot_axis (int, optional): rotation axis of bbox. Default: 2.
@@ -303,7 +303,7 @@ def show_pts_index_boxes(points,
                          save_path=None,
                          points_size=2,
                          point_color=(0.5, 0.5, 0.5),
-                         bbox_color=(0, 1, 0),
+                         bbox_color=(0, 0, 1),
                          points_in_box_color=(1, 0, 0),
                          rot_axis=2,
                          center_mode='lidar_bottom',
@@ -328,7 +328,7 @@ def show_pts_index_boxes(points,
         point_color (tuple[float], optional): the color of points.
             Default: (0.5, 0.5, 0.5).
         bbox_color (tuple[float], optional): the color of bbox.
-            Default: (0, 1, 0).
+            Default: (0, 0, 1).
         points_in_box_color (tuple[float], optional):
             the color of points which are in bbox3d. Default: (1, 0, 0).
         rot_axis (int, optional): rotation axis of bbox. Default: 2.
@@ -385,7 +385,7 @@ class Visualizer(object):
         point_color (tuple[float], optional): the color of points.
             Default: (0.5, 0.5, 0.5).
         bbox_color (tuple[float], optional): the color of bbox.
-            Default: (0, 1, 0).
+            Default: (0, 0, 1).
         points_in_box_color (tuple[float], optional):
             the color of points which are in bbox3d. Default: (1, 0, 0).
         rot_axis (int, optional): rotation axis of bbox. Default: 2.
@@ -402,7 +402,7 @@ class Visualizer(object):
                  save_path=None,
                  points_size=2,
                  point_color=(0.5, 0.5, 0.5),
-                 bbox_color=(0, 1, 0),
+                 bbox_color=(0, 0, 1),
                  points_in_box_color=(1, 0, 0),
                  rot_axis=2,
                  center_mode='lidar_bottom',

@@ -39,9 +39,9 @@
 using std::chrono::duration;
 using std::chrono::high_resolution_clock;
 
-#define ANCHOR_NUM 1314144
 void CenterPoint::InitParams(const std::string model_config) {
   YAML::Node params = YAML::LoadFile(model_config);
+  // pillar
   kPillarXSize =
       params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["VOXEL_SIZE"][0].as<float>();
   kPillarYSize =
@@ -54,15 +54,21 @@ void CenterPoint::InitParams(const std::string model_config) {
   kMaxXRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][3].as<float>();
   kMaxYRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][4].as<float>();
   kMaxZRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][5].as<float>();
-  kNumClass = params["CLASS_NAMES"].size();
+  kGridXSize =
+      static_cast<int>((kMaxXRange - kMinXRange) / kPillarXSize);  // 800
+  kGridYSize =
+      static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize);  // 800
+  kGridZSize = static_cast<int>((kMaxZRange - kMinZRange) / kPillarZSize);  // 1
+  assert(1 == kGridZSize);
   kMaxNumPillars =
       params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["MAX_NUMBER_OF_VOXELS"]["test"]
           .as<int>();
   kMaxNumPointsPerPillar =
       params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["MAX_POINTS_PER_VOXEL"]
           .as<int>();
-  kNumInputBoxFeature = 7;
-  kNumOutputBoxFeature = 7;
+
+  // postprocess
+  kNumClass = params["CLASS_NAMES"].size();
   kBatchSize = 1;
   kNmsPreMaxsize =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_PRE_MAXSIZE"]
@@ -70,26 +76,18 @@ void CenterPoint::InitParams(const std::string model_config) {
   kNmsPostMaxsize =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_POST_MAXSIZE"]
           .as<int>();
-  kPfeChannels = kNumThreads;
-  score_threshold_ =
+  score_thresh_ =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["SCORE_THRESH"]
           .as<float>();
-  nms_overlap_threshold_ =
+  nms_overlap_thresh_ =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_THRESH"]
           .as<float>();
 
-  // Generate secondary parameters based on above.
-  kGridXSize =
-      static_cast<int>((kMaxXRange - kMinXRange) / kPillarXSize);  // 800
-  kGridYSize =
-      static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize);  // 800
-  kGridZSize = static_cast<int>((kMaxZRange - kMinZRange) / kPillarZSize);  // 1
-  assert(1 == kGridZSize);
   kBackboneInputSize = kPfeChannels * kGridYSize * kGridXSize;
 
-  int downsample_ratio = 4;
-  kHeadXSize = kGridXSize / downsample_ratio;
-  kHeadYSize = kGridYSize / downsample_ratio;
+  kOutSizeFactor = params["MODEL"]["DENSE_HEAD"]["OUT_SIZE_FACTOR"].as<int>();
+  kHeadXSize = kGridXSize / kOutSizeFactor;
+  kHeadYSize = kGridYSize / kOutSizeFactor;
 }
 
 CenterPoint::CenterPoint(const bool use_onnx, const std::string pfe_file,
@@ -108,12 +106,10 @@ CenterPoint::CenterPoint(const bool use_onnx, const std::string pfe_file,
   scatter_cuda_ptr_.reset(
       new ScatterCuda(kPfeChannels, kGridXSize, kGridYSize));
 
-  const float float_min = std::numeric_limits<float>::lowest();
-  const float float_max = std::numeric_limits<float>::max();
   postprocess_cuda_ptr_.reset(new PostprocessCuda(
-      kNumThreads, float_min, float_max, kNumClass, kNmsPreMaxsize,
-      score_threshold_, nms_overlap_threshold_, kNmsPreMaxsize, kNmsPostMaxsize,
-      kNumBoxCorners, kNumInputBoxFeature, kNumOutputBoxFeature));
+      kNumClass, score_thresh_, nms_overlap_thresh_, kNmsPreMaxsize,
+      kNmsPostMaxsize, kOutSizeFactor, kHeadXSize, kHeadYSize, kPillarXSize,
+      kPillarYSize, kMinXRange, kMinYRange));
 }
 
 void CenterPoint::DeviceMemoryMalloc() {
@@ -150,11 +146,6 @@ void CenterPoint::DeviceMemoryMalloc() {
   /// dir_scores
   GPU_CHECK(cudaMalloc(&backbone_buffers_[3],
                        6 * kHeadXSize * kHeadYSize * sizeof(float)));
-
-  // for filter
-  host_box_ = new float[kNmsPreMaxsize * kNumClass * kNumOutputBoxFeature]();
-  host_score_ = new float[kNmsPreMaxsize * kNumClass * 18]();
-  host_filtered_count_ = new int[kNumClass]();
 }
 
 void CenterPoint::SetDeviceMemoryToZero() {
@@ -343,9 +334,7 @@ void CenterPoint::EngineToTRTModel(const std::string &engine_file,
 
 void CenterPoint::DoInference(const float *in_points_array,
                               const int in_num_points,
-                              std::vector<float> *out_detections,
-                              std::vector<int> *out_labels,
-                              std::vector<float> *out_scores) {
+                              std::vector<Box> &out_detections) {
   SetDeviceMemoryToZero();
   cudaDeviceSynchronize();
   // [STEP 1] : load pointcloud
@@ -406,17 +395,17 @@ void CenterPoint::DoInference(const float *in_points_array,
   backbone_context_->enqueueV2(backbone_buffers_, stream, nullptr);
   cudaDeviceSynchronize();
   auto backbone_end = high_resolution_clock::now();
-  // DEVICE_SAVE<float>((float *)backbone_buffers_[3], 6 * kHeadXSize * kHeadYSize,
-  //                    "00_dir_scores");
+  // DEVICE_SAVE<float>((float *)backbone_buffers_[3],
+  //                    6 * kHeadXSize * kHeadYSize, "00_dir_scores");
 
   // [STEP 6]: postprocess (multihead)
   auto postprocess_start = high_resolution_clock::now();
-  // postprocess_cuda_ptr_->DoPostprocessCuda(
-  //     reinterpret_cast<float *>(backbone_buffers_[2]),  // [bboxes]
-  //     reinterpret_cast<float *>(backbone_buffers_[1]),  // [scores]
-  //     host_box_, host_score_, host_filtered_count_, *out_detections,
-  //     *out_labels, *out_scores);
-  // cudaDeviceSynchronize();
+  postprocess_cuda_ptr_->DoPostprocessCuda(
+      reinterpret_cast<float *>(backbone_buffers_[1]),  // bbox_preds
+      reinterpret_cast<float *>(backbone_buffers_[2]),  // scores
+      reinterpret_cast<float *>(backbone_buffers_[3]),  // dir_scores
+      out_detections);
+  cudaDeviceSynchronize();
   auto postprocess_end = high_resolution_clock::now();
 
   // release the stream and the buffers
@@ -448,16 +437,17 @@ void CenterPoint::DoInference(const float *in_points_array,
 }
 
 CenterPoint::~CenterPoint() {
-  // for pillars
+  // pillars
   GPU_CHECK(cudaFree(dev_num_points_per_pillar_));
   GPU_CHECK(cudaFree(dev_pillar_point_feature_));
   GPU_CHECK(cudaFree(dev_pillar_coors_));
-  // for pfe forward
+  // pfe forward
   GPU_CHECK(cudaFree(dev_pfe_gather_feature_));
-
   GPU_CHECK(cudaFree(pfe_buffers_[0]));
   GPU_CHECK(cudaFree(pfe_buffers_[1]));
-
+  // scatter
+  GPU_CHECK(cudaFree(dev_scattered_feature_));
+  // postprocess
   GPU_CHECK(cudaFree(backbone_buffers_[0]));
   GPU_CHECK(cudaFree(backbone_buffers_[1]));
   GPU_CHECK(cudaFree(backbone_buffers_[2]));
@@ -466,9 +456,4 @@ CenterPoint::~CenterPoint() {
   backbone_context_->destroy();
   pfe_engine_->destroy();
   backbone_engine_->destroy();
-  // for post process
-  GPU_CHECK(cudaFree(dev_scattered_feature_));
-  delete[] host_box_;
-  delete[] host_score_;
-  delete[] host_filtered_count_;
 }

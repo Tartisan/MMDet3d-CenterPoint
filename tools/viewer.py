@@ -7,13 +7,15 @@ import argparse
 
 
 # http://www1.ynao.ac.cn/~jinhuahe/know_base/othertopics/computerissues/RGB_colortable.htm
-PALETTE = [[0, 255, 0],     # 绿色
+PALETTE = [[30, 144, 255],  # dodger blue
            [0, 255, 255],   # 青色
-           [255, 153, 18],  # 镉黄
-           [255, 0, 255],   # 深红
-           [3, 138, 158],   # 锰蓝
+           [255, 215, 0],   # 金黄色
+           [255, 0, 0],     # 红色
            [160, 32, 240],  # 紫色
-           [255, 255, 255]] # 黑色
+           [3, 168, 158],   # 锰蓝
+           [0, 0, 0],       # 黑色
+           [255, 97, 0],    # 橙色
+           [0, 201, 87]]    # 翠绿色
 
 def show_result_meshlab(vis, 
                         data,
@@ -25,8 +27,8 @@ def show_result_meshlab(vis,
     """Show 3D detection result by meshlab."""
     points = data
     pred_bboxes = result[:, :7]
-    pred_labels = result[:, 7]
-    pred_scores = result[:, 8]
+    pred_scores = result[:, 7]
+    pred_labels = result[:, 8]
 
     # filter out low score bboxes for visualization
     if score_thr > 0:
@@ -38,6 +40,8 @@ def show_result_meshlab(vis,
 
     vis.o3d_visualizer.clear_geometries()
     vis.add_points(points)
+    if gt_bboxes is not None:
+        vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(0, 0, 1))
     if pred_bboxes is not None:
         if pred_labels is None:
             vis.add_bboxes(bbox3d=pred_bboxes)
@@ -49,11 +53,11 @@ def show_result_meshlab(vis,
                     labelDict[i] = []
                 labelDict[i].append(pred_bboxes[j])
             for i in labelDict:
+                palette = [c / 255.0 for c in PALETTE[i]]
                 vis.add_bboxes(
                     bbox3d=np.array(labelDict[i]),
-                    bbox_color=([c / 255.0 for c in PALETTE[i]]))
-    if gt_bboxes is not None:
-        vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(0, 0, 1))
+                    bbox_color=palette, 
+                    points_in_box_color=palette)
 
     ctr = vis.o3d_visualizer.get_view_control()
     ctr.set_lookat([0,0,0])
@@ -76,7 +80,7 @@ parser.add_argument("--score_thr", type=float, default=0.1)
 args = parser.parse_args()
 
 def main():
-    with open("bootstrap.yaml") as f:
+    with open("../bootstrap.yaml") as f:
         config = yaml.load(f, Loader=yaml.FullLoader)
     result, data = dataloader(config['InputFile'], config['OutputFile'], config['LoadDim'])
     print(data.shape)

@@ -33,15 +33,15 @@ void Getinfo(void) {
 
 int Txt2Arrary(float *&points_array, std::string file_name,
                int num_feature = 4) {
-  std::ifstream InFile;
-  InFile.open(file_name.data());
-  assert(InFile.is_open());
+  std::ifstream in_file;
+  in_file.open(file_name.data());
+  assert(in_file.is_open());
 
   std::vector<float> temp_points;
   std::string c;
 
-  while (!InFile.eof()) {
-    InFile >> c;
+  while (!in_file.eof()) {
+    in_file >> c;
     temp_points.push_back(atof(c.c_str()));
   }
   points_array = new float[temp_points.size()];
@@ -49,20 +49,20 @@ int Txt2Arrary(float *&points_array, std::string file_name,
     points_array[i] = temp_points[i];
   }
 
-  InFile.close();
+  in_file.close();
   return temp_points.size() / num_feature;
 };
 
 int Bin2Arrary(float *&points_array, std::string file_name,
                int in_num_feature = 4, int out_num_feature = 4) {
-  std::ifstream InFile;
-  InFile.open(file_name.data(), ios::binary);
-  assert(InFile.is_open());
+  std::ifstream in_file;
+  in_file.open(file_name.data(), ios::binary);
+  assert(in_file.is_open());
   std::vector<float> temp_points;
   float f;
 
-  while (!InFile.eof()) {
-    InFile.read((char *)&f, sizeof(f));
+  while (!in_file.eof()) {
+    in_file.read((char *)&f, sizeof(f));
     temp_points.push_back(f);
   }
   points_array = new float[temp_points.size()];
@@ -74,28 +74,27 @@ int Bin2Arrary(float *&points_array, std::string file_name,
     }
   }
 
-  InFile.close();
+  in_file.close();
   return size;
 };
 
-void Boxes2Txt(const std::vector<float> &boxes, 
-               const std::vector<int> &labels, 
-               const std::vector<float> &scores, 
-               std::string file_name, 
-               int num_feature = 7) {
-  std::ofstream ofFile;
-  ofFile.open(file_name, std::ios::out);
-  if (ofFile.is_open()) {
-    for (size_t i = 0; i < boxes.size() / num_feature; ++i) {
-      for (int j = 0; j < num_feature; ++j) {
-        ofFile << boxes.at(i * num_feature + j) << " ";
-      }
-      ofFile << labels.at(i) << " ";
-      ofFile << scores.at(i) << " ";
-      ofFile << "\n";
+void Boxes2Txt(const std::vector<Box> &boxes, std::string file_name) {
+  std::ofstream out_file;
+  out_file.open(file_name, std::ios::out);
+  if (out_file.is_open()) {
+    for (const auto &box : boxes) {
+      out_file << box.x << " ";
+      out_file << box.y << " ";
+      out_file << box.z << " ";
+      out_file << box.l << " ";
+      out_file << box.w << " ";
+      out_file << box.h << " ";
+      out_file << box.r << " ";
+      out_file << box.score << " ";
+      out_file << box.label << "\n";
     }
   }
-  ofFile.close();
+  out_file.close();
   return;
 };
 
@@ -142,22 +141,15 @@ void test(void) {
   std::cout << "num points: " << in_num_points << std::endl;
 
   for (int _ = 0; _ < 1; _++) {
-    std::vector<float> out_detections;
-    std::vector<int> out_labels;
-    std::vector<float> out_scores;
-
+    std::vector<Box> out_detections;
     cudaDeviceSynchronize();
-    cp.DoInference(points_array, in_num_points, &out_detections, &out_labels,
-                   &out_scores);
+    cp.DoInference(points_array, in_num_points, out_detections);
     cudaDeviceSynchronize();
-    size_t BoxFeature = 7;
-    size_t num_objects = out_detections.size() / BoxFeature;
+    size_t num_objects = out_detections.size();
     std::cout << "detected objects: " << num_objects << std::endl;
-    assert(num_objects == out_labels.size());
-    assert(num_objects == out_scores.size());
 
     std::string boxes_file_name = config["OutputFile"].as<std::string>();
-    Boxes2Txt(out_detections, out_labels, out_scores, boxes_file_name);
+    Boxes2Txt(out_detections, boxes_file_name);
   }
 
   delete[] points_array;

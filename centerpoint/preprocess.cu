@@ -231,7 +231,7 @@ __global__ void make_pillar_mean_kernel(float* dev_points_mean,
 // dev_pillar_coors 过滤后点云对应的坐标
 // dev_pfe_gather_feature_ 加入全部点云中心3维坐标特征 再加全部体素中心3维坐标
 __global__ void gather_point_feature_kernel(
-    const int max_num_pillars_, const int max_num_points_per_pillar,
+    const int max_num_pillars, const int max_num_points_per_pillar,
     const int num_point_feature, const float min_x_range,
     const float min_y_range, const float min_z_range, const float pillar_x_size,
     const float pillar_y_size, const float pillar_z_size, const int grid_x_size,
@@ -359,32 +359,32 @@ PreprocessPointsCuda::PreprocessPointsCuda(
     const float pillar_z_size, const float min_x_range, const float min_y_range,
     const float min_z_range, const float max_x_range, const float max_y_range,
     const float max_z_range)
-    : num_threads_(num_threads),
-      max_num_pillars_(max_num_pillars),
-      max_points_per_pillar_(max_points_per_pillar),
-      num_point_feature_(num_point_feature),
-      grid_x_size_(grid_x_size),
-      grid_y_size_(grid_y_size),
-      grid_z_size_(grid_z_size),
-      pillar_x_size_(pillar_x_size),
-      pillar_y_size_(pillar_y_size),
-      pillar_z_size_(pillar_z_size),
-      min_x_range_(min_x_range),
-      min_y_range_(min_y_range),
-      min_z_range_(min_z_range),
-      max_x_range_(max_x_range),
-      max_y_range_(max_y_range),
-      max_z_range_(max_z_range) {
+    : kNumThreads_(num_threads),
+      kMaxNumPillars_(max_num_pillars),
+      kMaxNumPointsPerPillar_(max_points_per_pillar),
+      kNumPointFeature_(num_point_feature),
+      kGridXSize_(grid_x_size),
+      kGridYSize_(grid_y_size),
+      kGridZSize_(grid_z_size),
+      kPillarXSize_(pillar_x_size),
+      kPillarYSize_(pillar_y_size),
+      kPillarZSize_(pillar_z_size),
+      kMinXRange_(min_x_range),
+      kMinYRange_(min_y_range),
+      kMinZRange_(min_z_range),
+      kMaxXRange_(max_x_range),
+      kMaxYRange_(max_y_range),
+      kMaxZRange_(max_z_range) {
   GPU_CHECK(
       cudaMalloc(reinterpret_cast<void**>(&dev_pillar_point_feature_in_coors_),
-                 grid_y_size_ * grid_x_size_ * max_points_per_pillar_ *
-                     num_point_feature_ * sizeof(float)));
+                 kGridYSize_ * kGridXSize_ * kMaxNumPointsPerPillar_ *
+                     kNumPointFeature_ * sizeof(float)));
   GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&mask_),
-                       grid_y_size_ * grid_x_size_ * sizeof(int)));
+                       kGridYSize_ * kGridXSize_ * sizeof(int)));
   GPU_CHECK(
       cudaMalloc(reinterpret_cast<void**>(&dev_pillar_count_), sizeof(int)));
   GPU_CHECK(cudaMalloc(reinterpret_cast<void**>(&dev_points_mean_),
-                       max_num_pillars_ * 3 * sizeof(float)));
+                       kMaxNumPillars_ * 3 * sizeof(float)));
 }
 
 PreprocessPointsCuda::~PreprocessPointsCuda() {
@@ -401,28 +401,28 @@ void PreprocessPointsCuda::DoPreprocessPointsCuda(
     float* dev_pfe_gather_feature) {
   // initialize paraments
   GPU_CHECK(cudaMemset(dev_pillar_point_feature_in_coors_, 0,
-                       grid_y_size_ * grid_x_size_ * max_points_per_pillar_ *
-                           num_point_feature_ * sizeof(float)));
-  GPU_CHECK(cudaMemset(mask_, 0, grid_y_size_ * grid_x_size_ * sizeof(int)));
+                       kGridYSize_ * kGridXSize_ * kMaxNumPointsPerPillar_ *
+                           kNumPointFeature_ * sizeof(float)));
+  GPU_CHECK(cudaMemset(mask_, 0, kGridYSize_ * kGridXSize_ * sizeof(int)));
   GPU_CHECK(cudaMemset(dev_pillar_count_, 0, sizeof(int)));
   GPU_CHECK(
-      cudaMemset(dev_points_mean_, 0, max_num_pillars_ * 3 * sizeof(float)));
+      cudaMemset(dev_points_mean_, 0, kMaxNumPillars_ * 3 * sizeof(float)));
 
   // dev_pillar_point_feature_in_coors_ 将点云按照大小顺序排好，
   // pillar_count_histo 储存每一个位置上的点云数目
-  int num_block = DIVUP(in_num_points, num_threads_);
-  make_pillar_histo_kernel<<<num_block, num_threads_>>>(
+  int num_block = DIVUP(in_num_points, kNumThreads_);
+  make_pillar_histo_kernel<<<num_block, kNumThreads_>>>(
       dev_points, dev_pillar_point_feature_in_coors_, mask_, in_num_points,
-      max_points_per_pillar_, grid_x_size_, grid_y_size_, grid_z_size_,
-      min_x_range_, min_y_range_, min_z_range_, max_x_range_, max_y_range_,
-      max_z_range_, pillar_x_size_, pillar_y_size_, pillar_z_size_,
-      num_point_feature_);
+      kMaxNumPointsPerPillar_, kGridXSize_, kGridYSize_, kGridZSize_,
+      kMinXRange_, kMinYRange_, kMinZRange_, kMaxXRange_, kMaxYRange_,
+      kMaxZRange_, kPillarXSize_, kPillarYSize_, kPillarZSize_,
+      kNumPointFeature_);
 
-  make_pillar_index_kernel<<<grid_x_size_, grid_y_size_>>>(
+  make_pillar_index_kernel<<<kGridXSize_, kGridYSize_>>>(
       dev_pillar_point_feature_in_coors_, dev_pillar_point_feature,
       dev_pillar_coors, mask_, dev_pillar_count_, dev_num_points_per_pillar,
-      max_num_pillars_, max_points_per_pillar_, grid_x_size_,
-      num_point_feature_);
+      kMaxNumPillars_, kMaxNumPointsPerPillar_, kGridXSize_,
+      kNumPointFeature_);
   // dev_pillar_count_ pillar总数
   // mask_ 储存每一个位置上的点云数目
   // dev_num_points_per_pillar
@@ -434,15 +434,15 @@ void PreprocessPointsCuda::DoPreprocessPointsCuda(
                        cudaMemcpyDeviceToHost));
   std::cout << "find pillar num: " << host_pillar_count[0] << std::endl;
 
-  dim3 mean_block(max_points_per_pillar_, 3);
+  dim3 mean_block(kMaxNumPointsPerPillar_, 3);
   pillar_mean_kernel<<<host_pillar_count[0], mean_block, 64*3*sizeof(float)>>>(
-      dev_points_mean_, num_point_feature_, dev_pillar_point_feature,
-      dev_num_points_per_pillar, max_num_pillars_, max_points_per_pillar_);
+      dev_points_mean_, kNumPointFeature_, dev_pillar_point_feature,
+      dev_num_points_per_pillar, kMaxNumPillars_, kMaxNumPointsPerPillar_);
 
-  gather_point_feature_kernel<<<max_num_pillars_, max_points_per_pillar_>>>(
-      max_num_pillars_, max_points_per_pillar_, num_point_feature_,
-      min_x_range_, min_y_range_, min_z_range_, pillar_x_size_, pillar_y_size_,
-      pillar_z_size_, grid_x_size_, dev_pillar_point_feature,
+  gather_point_feature_kernel<<<kMaxNumPillars_, kMaxNumPointsPerPillar_>>>(
+      kMaxNumPillars_, kMaxNumPointsPerPillar_, kNumPointFeature_,
+      kMinXRange_, kMinYRange_, kMinZRange_, kPillarXSize_, kPillarYSize_,
+      kPillarZSize_, kGridXSize_, dev_pillar_point_feature,
       dev_num_points_per_pillar, dev_pillar_coors, dev_points_mean_,
       dev_pfe_gather_feature);
 }

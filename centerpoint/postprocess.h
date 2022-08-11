@@ -31,43 +31,68 @@
  */
 #pragma once
 
+#include <map>
 #include <memory>
 #include <vector>
 
-#include "nms.h"
+#include "common.h"
+#include "iou3d_nms.h"
+
+struct Box {
+  float x;
+  float y;
+  float z;
+  float l;
+  float w;
+  float h;
+  float r;
+  float vx = 0.0f;  // optional
+  float vy = 0.0f;  // optional
+  float score;
+  int label;
+  bool is_drop;  // for nms
+};
 
 class PostprocessCuda {
  public:
-  PostprocessCuda(const int num_threads, const float float_min,
-                  const float float_max, const int num_class,
-                  const int num_anchor_per_cls, const float score_threshold,
-                  const float nms_overlap_threshold, const int nms_pre_maxsize,
-                  const int nms_post_maxsize, const int num_box_corners,
-                  const int num_input_box_feature,
-                  const int num_output_box_feature);
-  ~PostprocessCuda() {}
+  PostprocessCuda(const int num_class, const float score_thresh,
+                  const float nms_overlap_thresh, const int nms_pre_maxsize,
+                  const int nms_post_maxsize, const int out_size_factor,
+                  const int output_h, const int output_w,
+                  const float pillar_x_size, const float pillar_y_size,
+                  const int min_x_range, const int min_y_range);
+  ~PostprocessCuda();
 
-  void DoPostprocessCuda(const float* box_preds, const float* box_scores,
-                         float* host_box, float* host_score,
-                         int* host_filtered_count,
-                         std::vector<float>& out_detection,
-                         std::vector<int>& out_label,
-                         std::vector<float>& out_score);
+  void DoPostprocessCuda(float* box_preds, float* scores, float* dir_scores,
+                         std::vector<Box>& out_detections);
 
  private:
-  const int num_threads_;
-  const float float_min_;
-  const float float_max_;
-  const int num_class_;
-  const int num_per_cls_;
-  const float score_threshold_;
-  const float nms_overlap_threshold_;
-  const int nms_pre_maxsize_;
-  const int nms_post_maxsize_;
-  const int num_box_corners_;
-  const int num_input_box_feature_;
-  const int num_output_box_feature_;
-  const std::vector<std::vector<int>> multihead_label_mapping_;
+  const int kNumClass_;
+  const float kScoreThresh_;
+  const float kNmsOverlapThresh_;
+  const int kNmsPreMaxsize_;
+  const int kNmsPostMaxsize_;
+  const int kHeadXSize_;
+  const int kHeadYSize_;
+  const int kOutSizeFactor_;
+  const float kPillarXSize_;
+  const float kPillarYSize_;
+  const float kMinXRange_;
+  const float kMinYRange_;
 
-  std::unique_ptr<NmsCuda> nms_cuda_ptr_;
+  // Todo: parameters to yaml
+  std::map<std::string, int> head_dict_{
+      {"reg", 2}, {"height", 1}, {"dim", 3}, {"rot", 2}};
+  const std::vector<int> kClassNumInTask_{1, 1, 2};
+
+  std::unique_ptr<Iou3dNmsCuda> nms_cuda_ptr_;
+
+  int *dev_box_counter_;
+  int* dev_score_idx_;
+  float* sigmoid_score_;
+  int* label_;
+  long* host_keep_data_;
+  float* host_boxes_;
+  int* host_label_;
+  int* host_score_idx_;
 };

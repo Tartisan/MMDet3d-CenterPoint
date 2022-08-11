@@ -97,9 +97,7 @@ class CenterPoint {
   ~CenterPoint();
 
   void DoInference(const float *in_points_array, const int in_num_points,
-                   std::vector<float> *out_detections,
-                   std::vector<int> *out_labels,
-                   std::vector<float> *out_scores);
+                   std::vector<Box> &out_detections);
 
  private:
   void DeviceMemoryMalloc();
@@ -135,21 +133,18 @@ class CenterPoint {
   int kNumClass;
   int kMaxNumPillars;
   int kMaxNumPointsPerPillar;
-  int kNumPointFeature = 4;  // [x, y, z, i]
-  int kNumAnchorSize = 7;
   // if you need to change this, watch the gather_point_feature_kernel func in
   // preprocess
-  int kNumThreads = 64; // also used for number of scattered feature
+  int kNumPointFeature = 4;  // [x, y, z, i]
+  int kNumThreads = 64;      // also used for number of scattered feature
   int kNumGatherPointFeature = 10;
+
   int kGridXSize;
   int kGridYSize;
   int kGridZSize;
-  int kPfeChannels;
+  int kPfeChannels = kNumThreads;
   int kBackboneInputSize;
-  int kNumInputBoxFeature;
-  int kNumOutputBoxFeature;
   int kBatchSize;
-  int kNumBoxCorners = 8;
   int kNmsPreMaxsize;
   int kNmsPostMaxsize;
 
@@ -164,15 +159,13 @@ class CenterPoint {
   // scatter
   float *dev_scattered_feature_;
   // backbone
+  int kOutSizeFactor;
   int kHeadXSize;
   int kHeadYSize;
   void *backbone_buffers_[4];
   // postprocess
-  float score_threshold_;
-  float nms_overlap_threshold_;
-  float *host_box_;
-  float *host_score_;
-  int *host_filtered_count_;
+  float score_thresh_;
+  float nms_overlap_thresh_;
 
   std::unique_ptr<PreprocessPointsCuda> preprocess_points_cuda_ptr_;
   std::unique_ptr<ScatterCuda> scatter_cuda_ptr_;

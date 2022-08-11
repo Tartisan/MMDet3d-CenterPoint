@@ -2,10 +2,10 @@ LoadDim: 5
 UseDim: 4
 
 UseOnnx: True
-PfeFile: /workspace/code/MMDet3d-CenterPoint/model/pfe.onnx
-BackboneFile: /workspace/code/MMDet3d-CenterPoint/model/backbone.onnx
+PfeFile: ../model/pfe.onnx
+BackboneFile: ../model/backbone.onnx
 
-ModelConfig: /workspace/code/MMDet3d-CenterPoint/cfgs/centerpoint_pillar02_secfpn_cyclic_aicv.yaml
+ModelConfig: ../cfgs/centerpoint_pillar02_secfpn_cyclic_aicv.yaml
 
-InputFile: /workspace/code/MMDet3d-CenterPoint/data/000022.bin
-OutputFile: /workspace/code/MMDet3d-CenterPoint/data/boxes.txt
+InputFile: ../data/000022.bin
+OutputFile: ../data/boxes.txt

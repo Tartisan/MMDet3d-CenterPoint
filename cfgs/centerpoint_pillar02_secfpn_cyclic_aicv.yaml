@@ -1,4 +1,4 @@
-CLASS_NAMES: ['Vehicle', 'Pedestrian', 'Bicycle', 'TrafficCone']
+CLASS_NAMES: ['Car', 'Pedestrian', 'Bicycle', 'TrafficCone']
 
 DATA_CONFIG:
     POINT_CLOUD_RANGE: [-80.0, -80.0, -3, 80.0, 80.0, 3]
@@ -21,15 +21,61 @@ DATA_CONFIG:
                 'train': 40000,
                 'test': 40000
             }
+
 MODEL:
     NAME: CenterPoint
+    VFE:
+        NAME: PillarVFE
+        WITH_DISTANCE: False
+        USE_ABSLOTE_XYZ: True
+        USE_NORM: True
+        NUM_FILTERS: [ 64, 64 ]
+    MAP_TO_BEV:
+        NAME: PointPillarScatter
+        NUM_BEV_FEATURES: 64
+    BACKBONE_2D:
+        NAME: BaseBEVBackbone
+        LAYER_NUMS: [ 3, 5, 5 ]
+        LAYER_STRIDES: [ 2, 2, 2 ]
+        NUM_FILTERS: [ 64, 128, 256 ]
+        UPSAMPLE_STRIDES: [ 0.5, 1, 2 ]
+        NUM_UPSAMPLE_FILTERS: [ 128, 128, 128 ]
     DENSE_HEAD:
         NAME: CenterHead
+        OUT_SIZE_FACTOR: 4
+        CLASS_AGNOSTIC: False
+        CLASS_NAMES_EACH_HEAD: [
+            ['Car'],
+            ['Bicycle'],
+            ['Pedestrian', 'TrafficCone']
+        ]
+        SHARED_CONV_CHANNEL: 64
+        USE_BIAS_BEFORE_NORM: True
+        NUM_HM_CONV: 2
+        SEPARATE_HEAD_CFG:
+            HEAD_ORDER: ['reg', 'height', 'dim', 'rot']
+            HEAD_DICT: {
+                'reg': {'out_channels': 2, 'num_conv': 2},
+                'height': {'out_channels': 1, 'num_conv': 2},
+                'dim': {'out_channels': 3, 'num_conv': 2},
+                'rot': {'out_channels': 2, 'num_conv': 2},
+            }
+        TARGET_ASSIGNER_CONFIG:
+            FEATURE_MAP_STRIDE: 1
+            NUM_MAX_OBJS: 500
+            GAUSSIAN_OVERLAP: 0.1
+            MIN_RADIUS: 2
+        LOSS_CONFIG:
+            LOSS_WEIGHTS: {
+                'cls_weight': 1.0,
+                'loc_weight': 2.0,
+                'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
+            }
     POST_PROCESSING:
         NMS_CONFIG:
             MULTI_CLASSES_NMS: False
             NMS_TYPE: nms_gpu
             SCORE_THRESH: 0.1
             NMS_THRESH: 0.01
-            NMS_PRE_MAXSIZE: 3840 # tensorrt max support 3840
+            NMS_PRE_MAXSIZE: 4096
             NMS_POST_MAXSIZE: 500
