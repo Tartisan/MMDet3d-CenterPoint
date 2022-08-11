@@ -1,1 +1,4 @@
-
+model/hesai40_mb-bp_backbone.onnx filter=lfs diff=lfs merge=lfs -text
+model/hesai40_mb-bp_pfe.onnx filter=lfs diff=lfs merge=lfs -text
+model/hesai90_backbone.onnx filter=lfs diff=lfs merge=lfs -text
+model/hesai90_pfe.onnx filter=lfs diff=lfs merge=lfs -text

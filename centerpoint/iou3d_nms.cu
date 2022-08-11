@@ -452,23 +452,22 @@ __global__ void raw_nms_kernel(
     const int xIdx = col_actual_idx % output_w;
     const int yIdx = col_actual_idx / output_w;
 
-    // [x, y, z, dx, dy, dz, r]
+    // [x, y, z, l, w, h, r]
     block_boxes[threadIdx.x * 7 + 0] =
         (reg[col_actual_idx] + xIdx) * out_size_factor * pillar_x_size +
         min_x_range;
     block_boxes[threadIdx.x * 7 + 1] =
-        (reg[output_h * output_w + col_actual_idx] + yIdx) * out_size_factor *
+        (reg[col_actual_idx + output_h * output_w] + yIdx) * out_size_factor *
             pillar_y_size +
         min_y_range;
     block_boxes[threadIdx.x * 7 + 2] = height[col_actual_idx];
-    block_boxes[threadIdx.x * 7 + 4] = dim[col_actual_idx];
-    block_boxes[threadIdx.x * 7 + 3] =
-        dim[col_actual_idx + output_w * output_h];
+    block_boxes[threadIdx.x * 7 + 3] = dim[col_actual_idx];
+    block_boxes[threadIdx.x * 7 + 4] =
+        dim[col_actual_idx + output_h * output_w];
     block_boxes[threadIdx.x * 7 + 5] =
-        dim[col_actual_idx + output_w * output_h * 2];
+        dim[col_actual_idx + output_h * output_w * 2];
     float theta =
-        atan2f(rot[col_actual_idx], rot[col_actual_idx + output_w * output_h]);
-    theta = -theta - 3.1415926 / 2;
+        atan2f(rot[col_actual_idx], rot[col_actual_idx + output_h * output_w]);
     block_boxes[threadIdx.x * 7 + 6] = theta;
   }
   __syncthreads();
@@ -480,8 +479,7 @@ __global__ void raw_nms_kernel(
     const int xIdx = row_actual_idx % output_w;
     const int yIdx = row_actual_idx / output_w;
 
-    // encode boxs according kitti format : (N, 7) [x, y, z, dy, dx, dz,
-    // heading]
+    // [x, y, z, l, w, h, r]
     float cur_box[7];
     cur_box[0] =
         (reg[row_actual_idx] + xIdx) * out_size_factor * pillar_x_size +
@@ -490,15 +488,12 @@ __global__ void raw_nms_kernel(
                      out_size_factor * pillar_y_size +
                  min_y_range;
     cur_box[2] = height[row_actual_idx];
-    cur_box[4] = dim[row_actual_idx];
-    cur_box[3] = dim[row_actual_idx + output_w * output_h];
-    cur_box[5] = dim[row_actual_idx + output_w * output_h * 2];
+    cur_box[3] = dim[row_actual_idx];
+    cur_box[4] = dim[row_actual_idx + output_h * output_w];
+    cur_box[5] = dim[row_actual_idx + output_h * output_w * 2];
     float theta =
-        atan2f(rot[row_actual_idx], rot[row_actual_idx + output_w * output_h]);
-    theta = -theta - 3.1415926 / 2;
+        atan2f(rot[row_actual_idx], rot[row_actual_idx + output_h * output_w]);
     cur_box[6] = theta;
-
-    // const float *cur_box = boxes + cur_box_idx * 7;
 
     int i = 0;
     unsigned long long t = 0;
@@ -527,19 +522,19 @@ __global__ void box_assign_kernel(float* reg, float* height, float* dim,
   int boxId = blockIdx.x;
   int channel = threadIdx.x;
   int idx = validIndexs[boxId];
-  if (channel == 0) 
+  if (channel == 0) {
     boxes[boxId * 7 + 0] = reg[idx];
-  else if (channel == 1)
-    boxes[boxId * 7 + 1] = reg[idx + output_w * output_h];
-  else if (channel == 2)
+  } else if (channel == 1) {
+    boxes[boxId * 7 + 1] = reg[idx + output_h * output_w];
+  } else if (channel == 2) {
     boxes[boxId * 7 + 2] = height[idx];
-  else if (channel == 3)
+  } else if (channel == 3) {
     boxes[boxId * 7 + 3] = dim[idx];
-  else if (channel == 4)
+  } else if (channel == 4) {
     boxes[boxId * 7 + 4] = dim[idx + output_h * output_w];
-  else if (channel == 5)
-    boxes[boxId * 7 + 5] = dim[idx + 2 * output_w * output_h];
-  else if (channel == 6) {
+  } else if (channel == 5) {
+    boxes[boxId * 7 + 5] = dim[idx + 2 * output_h * output_w];
+  } else if (channel == 6) {
     float theta = atan2f(rot[0 * output_h * output_w + idx],
                          rot[1 * output_h * output_w + idx]);
     theta = -theta - 3.1415926 / 2;
@@ -547,8 +542,9 @@ __global__ void box_assign_kernel(float* reg, float* height, float* dim,
   }
   // else if(channel == 7)
   // out_score[boxId] = score[idx];
-  else if (channel == 8)
+  else if (channel == 8) {
     out_label[boxId] = label[idx];
+  }
 }
 
 void box_assign_launcher(float* reg, float* height, float* dim, float* rot,

@@ -99,15 +99,8 @@ void gather_kernel(float* host_boxes, int* host_label, float* reg,
                    int* label, int* dev_indexs, long* host_keep_indexs,
                    int box_num_bef, int box_num_aft, const int length) {
   // copy keep_indexs from host to device
-  // int* tmp_keep_indexs = static_cast<int*>(host_keep_indexs);
   thrust::device_vector<long> dev_keep_indexs(host_keep_indexs,
                                               host_keep_indexs + box_num_aft);
-  // thrust::host_vector<long> host_keep_indexs_vec(
-  //     host_keep_indexs, host_keep_indexs + box_num_aft);
-  // thrust::copy(host_keep_indexs, host_keep_indexs + box_num_aft,
-  //              dev_keep_indexs.begin());
-  // thrust::copy(host_keep_indexs_vec.begin(), host_keep_indexs_vec.end(),
-  //              dev_keep_indexs.begin());
   // gather keeped indexs after nms
   thrust::device_vector<int> dev_indexs_bef(dev_indexs,
                                             dev_indexs + box_num_bef);
@@ -286,6 +279,7 @@ void PostprocessCuda::DoPostprocessCuda(float* bbox_preds, float* scores,
       box.l = host_boxes_[j + 3 * box_num_aft];
       box.w = host_boxes_[j + 4 * box_num_aft];
       box.h = host_boxes_[j + 5 * box_num_aft];
+      box.z -= box.h * 0.5;
       float r_sin = host_boxes_[j + 6 * box_num_aft];
       float r_cos = host_boxes_[j + 7 * box_num_aft];
       box.r = atan2(r_sin, r_cos);

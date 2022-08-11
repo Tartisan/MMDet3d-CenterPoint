@@ -140,7 +140,7 @@ void test(void) {
                  config["UseDim"].as<int>());
   std::cout << "num points: " << in_num_points << std::endl;
 
-  for (int _ = 0; _ < 1; _++) {
+  for (int _ = 0; _ < 4; _++) {
     std::vector<Box> out_detections;
     cudaDeviceSynchronize();
     cp.DoInference(points_array, in_num_points, out_detections);

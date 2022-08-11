@@ -395,10 +395,10 @@ void CenterPoint::DoInference(const float *in_points_array,
   backbone_context_->enqueueV2(backbone_buffers_, stream, nullptr);
   cudaDeviceSynchronize();
   auto backbone_end = high_resolution_clock::now();
-  // DEVICE_SAVE<float>((float *)backbone_buffers_[3],
-  //                    6 * kHeadXSize * kHeadYSize, "00_dir_scores");
+  // DEVICE_SAVE<float>((float *)backbone_buffers_[2],
+  //                    4 * kHeadXSize * kHeadYSize, "00_scores");
 
-  // [STEP 6]: postprocess (multihead)
+  // [STEP 6]: postprocess
   auto postprocess_start = high_resolution_clock::now();
   postprocess_cuda_ptr_->DoPostprocessCuda(
       reinterpret_cast<float *>(backbone_buffers_[1]),  // bbox_preds

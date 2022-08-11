@@ -1,7 +1,7 @@
 #  Inference with TensorRT
 
-This repository contains sources and model for [centerpoint](https://arxiv.org/abs/1812.05784) inference using TensorRT.
-The model is created with [mmdetection3d](https://github.com/open-mmlab/mmdetection3d).
+This repository contains sources and model for [CenterPoint](https://arxiv.org/abs/2006.11275) inference using TensorRT.
+The model is created with [mmdetection3d](https://github.com/Tartisan/mmdetection3d).
 
 Overall inference has five phases:
 
@@ -13,7 +13,7 @@ Overall inference has five phases:
 
 ## Model && Data
 
-The demo use the waymo data from Waymo Open Dataset.
+The demo used the custom dataset like KITTI.
 The onnx file can be converted by [onnx_tools](https://github.com/Tartisan/mmdetection3d/tree/master/tools/onnx_tools/centerpoint)
 
 ### Prerequisites
@@ -38,34 +38,36 @@ $ ./demo
 You should install `open3d` in python environment.
 
 ```shell
+$ cd tools
 $ python tools/viewer.py
 ```
 
-<center><img src="https://images.weserv.nl/?url=https://article.biliimg.com/bfs/article/dd4b2ea349cb4c390804401006dbc00a32182792.png" width=49%> <img src="https://images.weserv.nl/?url=https://article.biliimg.com/bfs/article/b92f9f1862b63c9ef8ce970e645c73092d302ad3.png" width=49%>
-trt fp16 model < --- > pytorch model
-</center>
+| trt fp16 | pytorch |
+| -------- | ------- |
+| ![trt fp16](https://tva1.sinaimg.cn/large/0080fUsgly1h532qgmipsj31d00qfatj.jpg) | ![pytorch](https://tvax2.sinaimg.cn/large/0080fUsgly1h532pas0xmj31ey0rlask.jpg) |
+
 
 #### Performance in FP16
 
 ```
 | Function(unit:ms) | NVIDIA RTX A4000 Laptop GPU |
 | ----------------- | --------------------------- |
-| Preprocess        | 0.43786  ms                 |
-| Pfe               | 3.27231  ms                 |
-| Scatter           | 0.085242 ms                 |
-| Backbone          | 71.0085  ms                 |
-| Postprocess       | 1.79278  ms                 |
-| Summary           | 76.601   ms                 |
+| Preprocess        | 0.950476 ms                 |
+| Pfe               | 4.37507  ms                 |
+| Scatter           | 0.204093 ms                 |
+| Backbone          | 9.84435  ms                 |
+| Postprocess       | 2.91952  ms                 |
+| Summary           | 18.2961  ms                 |
 ```
 
 ## Note
 
-- The waymo pretrained model in this project is trained only using 4-channel (x, y, z, i), which is different from the mmdetection3d pretrained_model.
+- The pretrained model in this project doesn't predict vx, vy.
 - The demo will cache the onnx file to improve performance. If a new onnx will be used, please remove the cache file in "./model".
 
 ## References
 
-- [CenterPoint: Fast Encoders for Object Detection from Point Clouds](https://arxiv.org/abs/1812.05784)
-- [mmdetection3d](https://github.com/open-mmlab/mmdetection3d)
-- [mmdet_pp](https://github.com/perhapswo/mmdet_pp)
-- [CUDA-CenterPoint](https://github.com/NVIDIA-AI-IOT/CUDA-CenterPoint)
+- [Center-based 3D Object Detection and Tracking](https://arxiv.org/abs/2006.11275)
+- [mmdetection3d](https://github.com/Tartisan/mmdetection3d)
+- [tianweiy/CenterPoint](https://github.com/tianweiy/CenterPoint)
+- [Abraham423/CenterPoint](https://github.com/Abraham423/CenterPoint)
