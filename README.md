@@ -1,4 +1,4 @@
-#  Inference with TensorRT
+#  CenterPoint inferenced with TensorRT
 
 This repository contains sources and model for [CenterPoint](https://arxiv.org/abs/2006.11275) inference using TensorRT.
 The model is created with [mmdetection3d](https://github.com/Tartisan/mmdetection3d).
@@ -39,7 +39,7 @@ You should install `open3d` in python environment.
 
 ```shell
 $ cd tools
-$ python tools/viewer.py
+$ python viewer.py
 ```
 
 | trt fp16 | pytorch |
