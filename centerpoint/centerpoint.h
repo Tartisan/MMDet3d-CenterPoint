@@ -154,7 +154,7 @@ class CenterPoint {
 
   int host_pillar_count_[1];
 
-  float *dev_num_points_per_pillar_;
+  int *dev_num_points_per_pillar_;
   float *dev_pillar_point_feature_;
   int *dev_pillar_coors_;
   float *dev_pfe_gather_feature_;

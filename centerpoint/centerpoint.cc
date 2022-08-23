@@ -106,12 +106,12 @@ void CenterPoint::InitParams(const std::string model_config) {
 CenterPoint::CenterPoint(const YAML::Node &config, const std::string pfe_file,
                          const std::string backbone_file,
                          const std::string model_config) {
+  trt_mode_ = config["TRT_MODE"].as<std::string>();
+  enable_debug_ = config["EnableDebug"].as<bool>();
+
   InitParams(model_config);
   InitTRT(config["UseOnnx"].as<bool>(), pfe_file, backbone_file);
   DeviceMemoryMalloc();
-
-  enable_debug_ = config["EnableDebug"].as<bool>();
-  trt_mode_ = config["TRT_MODE"].as<std::string>();
 
   preprocess_points_cuda_ptr_.reset(new PreprocessPointsCuda(
       kNumThreads, kMaxNumPillars, kMaxNumPointsPerPillar, kNumPointFeature,
@@ -131,7 +131,7 @@ CenterPoint::CenterPoint(const YAML::Node &config, const std::string pfe_file,
 void CenterPoint::DeviceMemoryMalloc() {
   // voxelize
   GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_num_points_per_pillar_),
-                       kMaxNumPillars * sizeof(float)));  // M
+                       kMaxNumPillars * sizeof(int)));  // M
   GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_pillar_point_feature_),
                        kMaxNumPillars * kMaxNumPointsPerPillar *
                            kNumPointFeature * sizeof(float)));  // [M , m , 4]
@@ -166,7 +166,7 @@ void CenterPoint::DeviceMemoryMalloc() {
 
 void CenterPoint::SetDeviceMemoryToZero() {
   GPU_CHECK(cudaMemset(dev_num_points_per_pillar_, 0,
-                       kMaxNumPillars * sizeof(float)));
+                       kMaxNumPillars * sizeof(int)));
   GPU_CHECK(cudaMemset(dev_pillar_point_feature_, 0,
                        kMaxNumPillars * kMaxNumPointsPerPillar *
                            kNumPointFeature * sizeof(float)));
@@ -376,8 +376,10 @@ void CenterPoint::DoInference(const float *in_points_array,
     DEVICE_SAVE<float>(dev_pfe_gather_feature_, kMaxNumPillars,
                        kMaxNumPointsPerPillar * kNumGatherPointFeature,
                        "00_pfe_gather_feature.txt");
+    DEVICE_SAVE<float>(dev_pfe_gather_feature_, kMaxNumPillars, 1,
+                       "01_num_points_per_pillar.txt");
     DEVICE_SAVE<int>(dev_pillar_coors_, kMaxNumPillars, 4,
-                     "01_pillar_coors.txt");
+                     "02_pillar_coors.txt");
   }
 
   // [STEP 3] : pfe forward
@@ -394,7 +396,7 @@ void CenterPoint::DoInference(const float *in_points_array,
   auto pfe_end = high_resolution_clock::now();
   if (enable_debug_) {
     DEVICE_SAVE<float>(reinterpret_cast<float *>(pfe_buffers_[1]),
-                       kMaxNumPillars, kPfeChannels, "02_pfe_net_feature.txt");
+                       kMaxNumPillars, kPfeChannels, "03_voxel_feature.txt");
   }
 
   // [STEP 4] : scatter pillar feature
@@ -406,7 +408,7 @@ void CenterPoint::DoInference(const float *in_points_array,
   auto scatter_end = high_resolution_clock::now();
   if (enable_debug_) {
     DEVICE_SAVE<float>(dev_scattered_feature_, kGridYSize * kGridXSize,
-                       kPfeChannels, "03_scattered_feature.txt");
+                       kPfeChannels, "04_scattered_feature.txt");
   }
 
   // [STEP 5] : backbone forward
@@ -419,11 +421,11 @@ void CenterPoint::DoInference(const float *in_points_array,
   auto backbone_end = high_resolution_clock::now();
   if (enable_debug_) {
     DEVICE_SAVE<float>((float *)backbone_buffers_[1], kHeadXSize * kHeadYSize,
-                       18, "04_bbox_preds.txt");
+                       18, "05_bbox_preds.txt");
     DEVICE_SAVE<float>((float *)backbone_buffers_[2], kHeadXSize * kHeadYSize,
-                       4, "05_scores.txt");
+                       4, "06_scores.txt");
     DEVICE_SAVE<float>((float *)backbone_buffers_[3], kHeadXSize * kHeadYSize,
-                       6, "06_dir_scores.txt");
+                       6, "07_dir_scores.txt");
   }
 
   // [STEP 6]: postprocess

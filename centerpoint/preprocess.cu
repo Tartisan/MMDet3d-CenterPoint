@@ -104,7 +104,7 @@ __global__ void make_pillar_histo_kernel(
 __global__ void make_pillar_index_kernel(
     float* dev_pillar_point_feature_in_coors, float* dev_pillar_point_feature,
     int* dev_pillar_coors, int* mask, int* dev_pillar_count,
-    float* dev_num_points_per_pillar, const int max_pillars,
+    int* dev_num_points_per_pillar, const int max_pillars,
     const int max_points_per_pillar, const int grid_x_size,
     const int num_point_feature) {
   int x = blockIdx.x;
@@ -138,7 +138,7 @@ __global__ void make_pillar_index_kernel(
 __global__ void pillar_mean_kernel(float* dev_points_mean,
                                    const int num_point_feature,
                                    const float* dev_pillar_point_feature,
-                                   const float* dev_num_points_per_pillar,
+                                   const int* dev_num_points_per_pillar,
                                    int max_pillars, int max_points_per_pillar) {
   extern __shared__ float temp[];
   int ith_pillar = blockIdx.x;
@@ -188,7 +188,7 @@ __device__ void warpReduce(volatile float* sdata, int ith_point, int axis) {
 __global__ void make_pillar_mean_kernel(float* dev_points_mean,
                                         const int num_point_feature,
                                         const float* dev_pillar_point_feature,
-                                        const float* dev_num_points_per_pillar,
+                                        const int* dev_num_points_per_pillar,
                                         int max_pillars,
                                         int max_points_pre_pillar) {
   extern __shared__ float temp[];
@@ -236,7 +236,7 @@ __global__ void gather_point_feature_kernel(
     const float min_y_range, const float min_z_range, const float pillar_x_size,
     const float pillar_y_size, const float pillar_z_size, const int grid_x_size,
     const float* dev_pillar_point_feature,
-    const float* dev_num_points_per_pillar, const int* dev_pillar_coors,
+    const int* dev_num_points_per_pillar, const int* dev_pillar_coors,
     float* dev_points_mean, float* dev_pfe_gather_feature_) {
   int ith_pillar = blockIdx.x;
   int ith_point = threadIdx.x;
@@ -291,10 +291,6 @@ __global__ void gather_point_feature_kernel(
       dev_pillar_point_feature[ith_pillar * max_num_points_per_pillar *
                                    num_point_feature +
                                ith_point * num_point_feature + 3];
-
-  dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar *
-                              num_gather_feature +
-                          ith_point * num_gather_feature + 3] = 0.0f;
 
   // f_cluster = voxel_features[:, :, :3] - points_mean
   dev_pfe_gather_feature_[ith_pillar * max_num_points_per_pillar *
@@ -396,7 +392,7 @@ PreprocessPointsCuda::~PreprocessPointsCuda() {
 
 void PreprocessPointsCuda::DoPreprocessPointsCuda(
     const float* dev_points, const int in_num_points,
-    float* dev_num_points_per_pillar, float* dev_pillar_point_feature,
+    int* dev_num_points_per_pillar, float* dev_pillar_point_feature,
     int* dev_pillar_coors, int* host_pillar_count,
     float* dev_pfe_gather_feature) {
   // initialize paraments

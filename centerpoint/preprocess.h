@@ -45,7 +45,7 @@ class PreprocessPointsCuda {
   ~PreprocessPointsCuda();
 
   void DoPreprocessPointsCuda(const float* dev_points, const int in_num_points,
-                              float* dev_num_points_per_pillar,
+                              int* dev_num_points_per_pillar,
                               float* dev_pillar_point_feature,
                               int* dev_pillar_coors, int* host_pillar_count,
                               float* dev_pfe_gather_feature);
