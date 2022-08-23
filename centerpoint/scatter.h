@@ -50,11 +50,6 @@
 #pragma once
 
 class ScatterCuda {
- private:
-  const int feature_num_;
-  const int grid_x_size_;
-  const int grid_y_size_;
-
  public:
   /**
    * @brief Constructor
@@ -78,4 +73,9 @@ class ScatterCuda {
    */
   void DoScatterCuda(const int pillar_count, int* dev_pillar_coors,
                      float* pfe_feature, float* scattered_feature);
+
+ private:
+  const int kFeatureNum_;
+  const int kGridXSize_;
+  const int kGridYSize_;
 };

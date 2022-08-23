@@ -115,8 +115,7 @@ void gather_kernel(float* host_boxes, int* host_label, float* reg,
   thrust::gather(dev_indexs_aft.begin(), dev_indexs_aft.end(), reg_vec.begin(),
                  out_boxes.begin());
   thrust::gather(dev_indexs_aft.begin(), dev_indexs_aft.end(),
-                 reg_vec.begin() + length,
-                 out_boxes.begin() + box_num_aft);
+                 reg_vec.begin() + length, out_boxes.begin() + box_num_aft);
   // gather height
   thrust::device_vector<float> height_vec(height, height + length);
   thrust::gather(dev_indexs_aft.begin(), dev_indexs_aft.end(),
@@ -141,16 +140,15 @@ void gather_kernel(float* host_boxes, int* host_label, float* reg,
                  rot_vec.begin() + length * 1,
                  out_boxes.begin() + 7 * box_num_aft);
   // gather score
-  thrust::device_vector<float> sorted_score_vec(
-      sorted_score, sorted_score + 1 * length);
+  thrust::device_vector<float> sorted_score_vec(sorted_score,
+                                                sorted_score + 1 * length);
   thrust::gather(dev_keep_indexs.begin(), dev_keep_indexs.end(),
                  sorted_score_vec.begin() + length * 0,
                  out_boxes.begin() + 8 * box_num_aft);
   // gather label
   thrust::device_vector<int> label_vec(label, label + 1 * length);
   thrust::gather(dev_indexs_aft.begin(), dev_indexs_aft.end(),
-                 label_vec.begin() + length * 0,
-                 out_label.begin());
+                 label_vec.begin() + length * 0, out_label.begin());
   // copy values from device to host
   thrust::copy(out_boxes.begin(), out_boxes.end(), host_boxes);
   thrust::copy(out_label.begin(), out_label.end(), host_label);
@@ -163,7 +161,9 @@ PostprocessCuda::PostprocessCuda(const int num_class, const float score_thresh,
                                  const int out_size_factor, const int output_h,
                                  const int output_w, const float pillar_x_size,
                                  const float pillar_y_size,
-                                 const int min_x_range, const int min_y_range)
+                                 const int min_x_range, const int min_y_range,
+                                 const std::map<std::string, int>& head_dict,
+                                 const std::vector<int>& class_num_in_task)
     : kNumClass_(num_class),
       kScoreThresh_(score_thresh),
       kNmsOverlapThresh_(nms_overlap_thresh),
@@ -176,6 +176,9 @@ PostprocessCuda::PostprocessCuda(const int num_class, const float score_thresh,
       kPillarYSize_(pillar_y_size),
       kMinXRange_(min_x_range),
       kMinYRange_(min_y_range) {
+  kHeadDict_ = head_dict;
+  kClassNumInTask_ = class_num_in_task;
+
   nms_cuda_ptr_.reset(new Iou3dNmsCuda(
       kHeadXSize_, kHeadYSize_, kNmsOverlapThresh_, kOutSizeFactor_,
       kPillarXSize_, kPillarYSize_, kMinXRange_, kMinYRange_));
@@ -214,16 +217,16 @@ PostprocessCuda::PostprocessCuda(const int num_class, const float score_thresh,
 void PostprocessCuda::DoPostprocessCuda(float* bbox_preds, float* scores,
                                         float* dir_scores,
                                         std::vector<Box>& out_detections) {
-  int bbox_range = head_dict_["reg"] + head_dict_["height"] + head_dict_["dim"];
-  int dir_range = head_dict_["rot"];
+  int bbox_range = kHeadDict_["reg"] + kHeadDict_["height"] + kHeadDict_["dim"];
+  int dir_range = kHeadDict_["rot"];
   std::vector<int> score_range{0};
 
   for (size_t i = 0; i < kClassNumInTask_.size(); i++) {
     float* reg = bbox_preds + (bbox_range * i + 0) * kHeadXSize_ * kHeadYSize_;
-    float* height = bbox_preds + (bbox_range * i + head_dict_["reg"]) *
+    float* height = bbox_preds + (bbox_range * i + kHeadDict_["reg"]) *
                                      kHeadXSize_ * kHeadYSize_;
     float* dim = bbox_preds +
-                 (bbox_range * i + head_dict_["reg"] + head_dict_["height"]) *
+                 (bbox_range * i + kHeadDict_["reg"] + kHeadDict_["height"]) *
                      kHeadXSize_ * kHeadYSize_;
     float* score = scores + score_range[i] * kHeadXSize_ * kHeadYSize_;
     float* rot = dir_scores + (dir_range * i) * kHeadXSize_ * kHeadYSize_;
@@ -272,9 +275,11 @@ void PostprocessCuda::DoPostprocessCuda(float* bbox_preds, float* scores,
 
       Box box;
       box.x = (host_boxes_[j + 0 * box_num_aft] + xIdx) * kOutSizeFactor_ *
-                  kPillarXSize_ + kMinXRange_;
+                  kPillarXSize_ +
+              kMinXRange_;
       box.y = (host_boxes_[j + 1 * box_num_aft] + yIdx) * kOutSizeFactor_ *
-                  kPillarYSize_ + kMinYRange_;
+                  kPillarYSize_ +
+              kMinYRange_;
       box.z = host_boxes_[j + 2 * box_num_aft];
       box.l = host_boxes_[j + 3 * box_num_aft];
       box.w = host_boxes_[j + 4 * box_num_aft];

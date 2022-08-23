@@ -76,10 +76,10 @@ void CenterPoint::InitParams(const std::string model_config) {
   kNmsPostMaxsize =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_POST_MAXSIZE"]
           .as<int>();
-  score_thresh_ =
+  kScoreThresh =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["SCORE_THRESH"]
           .as<float>();
-  nms_overlap_thresh_ =
+  kNmsOverlapThresh =
       params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_THRESH"]
           .as<float>();
 
@@ -88,14 +88,30 @@ void CenterPoint::InitParams(const std::string model_config) {
   kOutSizeFactor = params["MODEL"]["DENSE_HEAD"]["OUT_SIZE_FACTOR"].as<int>();
   kHeadXSize = kGridXSize / kOutSizeFactor;
   kHeadYSize = kGridYSize / kOutSizeFactor;
+
+  std::vector<std::string> head_names{"reg", "height", "dim", "rot"};
+  for (auto name : head_names) {
+    kHeadDict[name] = params["MODEL"]["DENSE_HEAD"]["SEPARATE_HEAD_CFG"]
+                            ["HEAD_DICT"][name]["out_channels"]
+                                .as<int>();
+  }
+  size_t num_task =
+      params["MODEL"]["DENSE_HEAD"]["CLASS_NAMES_EACH_HEAD"].size();
+  for (size_t i = 0; i < num_task; ++i) {
+    kClassNumInTask.push_back(
+        params["MODEL"]["DENSE_HEAD"]["CLASS_NAMES_EACH_HEAD"][i].size());
+  }
 }
 
-CenterPoint::CenterPoint(const bool use_onnx, const std::string pfe_file,
+CenterPoint::CenterPoint(const YAML::Node &config, const std::string pfe_file,
                          const std::string backbone_file,
                          const std::string model_config) {
   InitParams(model_config);
-  InitTRT(use_onnx, pfe_file, backbone_file);
+  InitTRT(config["UseOnnx"].as<bool>(), pfe_file, backbone_file);
   DeviceMemoryMalloc();
+
+  enable_debug_ = config["EnableDebug"].as<bool>();
+  trt_mode_ = config["TRT_MODE"].as<std::string>();
 
   preprocess_points_cuda_ptr_.reset(new PreprocessPointsCuda(
       kNumThreads, kMaxNumPillars, kMaxNumPointsPerPillar, kNumPointFeature,
@@ -107,9 +123,9 @@ CenterPoint::CenterPoint(const bool use_onnx, const std::string pfe_file,
       new ScatterCuda(kPfeChannels, kGridXSize, kGridYSize));
 
   postprocess_cuda_ptr_.reset(new PostprocessCuda(
-      kNumClass, score_thresh_, nms_overlap_thresh_, kNmsPreMaxsize,
+      kNumClass, kScoreThresh, kNmsOverlapThresh, kNmsPreMaxsize,
       kNmsPostMaxsize, kOutSizeFactor, kHeadXSize, kHeadYSize, kPillarXSize,
-      kPillarYSize, kMinXRange, kMinYRange));
+      kPillarYSize, kMinXRange, kMinYRange, kHeadDict, kClassNumInTask));
 }
 
 void CenterPoint::DeviceMemoryMalloc() {
@@ -142,7 +158,7 @@ void CenterPoint::DeviceMemoryMalloc() {
                        18 * kHeadXSize * kHeadYSize * sizeof(float)));
   /// scores
   GPU_CHECK(cudaMalloc(&backbone_buffers_[2],
-                       4 * kHeadXSize * kHeadYSize * sizeof(float)));
+                       kNumClass * kHeadXSize * kHeadYSize * sizeof(float)));
   /// dir_scores
   GPU_CHECK(cudaMalloc(&backbone_buffers_[3],
                        6 * kHeadXSize * kHeadYSize * sizeof(float)));
@@ -173,7 +189,7 @@ void CenterPoint::SetDeviceMemoryToZero() {
   GPU_CHECK(cudaMemset(backbone_buffers_[1], 0,
                        18 * kHeadXSize * kHeadYSize * sizeof(float)));
   GPU_CHECK(cudaMemset(backbone_buffers_[2], 0,
-                       4 * kHeadXSize * kHeadYSize * sizeof(float)));
+                       kNumClass * kHeadXSize * kHeadYSize * sizeof(float)));
   GPU_CHECK(cudaMemset(backbone_buffers_[3], 0,
                        6 * kHeadXSize * kHeadYSize * sizeof(float)));
 }
@@ -229,7 +245,7 @@ void CenterPoint::OnnxToTRTModel(
     nvinfer1::IBuilderConfig *config = builder->createBuilderConfig();
     config->setMaxWorkspaceSize(1 << 30);
     bool has_fast_fp16 = builder->platformHasFastFp16();
-    if (has_fast_fp16) {
+    if (trt_mode_ == "fp16" && has_fast_fp16) {
       std::cout << "the platform supports Fp16, use Fp16." << std::endl;
       config->setFlag(nvinfer1::BuilderFlag::kFP16);
     }
@@ -356,10 +372,13 @@ void CenterPoint::DoInference(const float *in_points_array,
       dev_pfe_gather_feature_);
   cudaDeviceSynchronize();
   auto preprocess_end = high_resolution_clock::now();
-  // DEVICE_SAVE<float>(
-  //     dev_pfe_gather_feature_,
-  //     kMaxNumPillars * kMaxNumPointsPerPillar * kNumGatherPointFeature,
-  //     "0_Model_pfe_input_gather_feature");
+  if (enable_debug_) {
+    DEVICE_SAVE<float>(dev_pfe_gather_feature_, kMaxNumPillars,
+                       kMaxNumPointsPerPillar * kNumGatherPointFeature,
+                       "00_pfe_gather_feature.txt");
+    DEVICE_SAVE<int>(dev_pillar_coors_, kMaxNumPillars, 4,
+                     "01_pillar_coors.txt");
+  }
 
   // [STEP 3] : pfe forward
   cudaStream_t stream;
@@ -373,9 +392,10 @@ void CenterPoint::DoInference(const float *in_points_array,
   pfe_context_->enqueueV2(pfe_buffers_, stream, nullptr);
   cudaDeviceSynchronize();
   auto pfe_end = high_resolution_clock::now();
-  // DEVICE_SAVE<float>(reinterpret_cast<float *>(pfe_buffers_[1]),
-  //                    kMaxNumPillars * kPfeChannels,
-  //                    "1_Model_pfe_output_buffers_[1]");
+  if (enable_debug_) {
+    DEVICE_SAVE<float>(reinterpret_cast<float *>(pfe_buffers_[1]),
+                       kMaxNumPillars, kPfeChannels, "02_pfe_net_feature.txt");
+  }
 
   // [STEP 4] : scatter pillar feature
   auto scatter_start = high_resolution_clock::now();
@@ -384,8 +404,10 @@ void CenterPoint::DoInference(const float *in_points_array,
                                    dev_scattered_feature_);
   cudaDeviceSynchronize();
   auto scatter_end = high_resolution_clock::now();
-  // DEVICE_SAVE<float>(dev_scattered_feature_, kBackboneInputSize,
-  //                    "2_Model_backbone_input_dev_scattered_feature");
+  if (enable_debug_) {
+    DEVICE_SAVE<float>(dev_scattered_feature_, kGridYSize * kGridXSize,
+                       kPfeChannels, "03_scattered_feature.txt");
+  }
 
   // [STEP 5] : backbone forward
   auto backbone_start = high_resolution_clock::now();
@@ -395,8 +417,14 @@ void CenterPoint::DoInference(const float *in_points_array,
   backbone_context_->enqueueV2(backbone_buffers_, stream, nullptr);
   cudaDeviceSynchronize();
   auto backbone_end = high_resolution_clock::now();
-  // DEVICE_SAVE<float>((float *)backbone_buffers_[2],
-  //                    4 * kHeadXSize * kHeadYSize, "00_scores");
+  if (enable_debug_) {
+    DEVICE_SAVE<float>((float *)backbone_buffers_[1], kHeadXSize * kHeadYSize,
+                       18, "04_bbox_preds.txt");
+    DEVICE_SAVE<float>((float *)backbone_buffers_[2], kHeadXSize * kHeadYSize,
+                       4, "05_scores.txt");
+    DEVICE_SAVE<float>((float *)backbone_buffers_[3], kHeadXSize * kHeadYSize,
+                       6, "06_dir_scores.txt");
+  }
 
   // [STEP 6]: postprocess
   auto postprocess_start = high_resolution_clock::now();

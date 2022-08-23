@@ -64,13 +64,13 @@ __global__ void scatter_kernel(int *dev_pillar_coors, float *pfe_feature,
 
 ScatterCuda::ScatterCuda(const int feature_num, const int grid_x_size,
                          const int grid_y_size)
-    : feature_num_(feature_num),
-      grid_x_size_(grid_x_size),
-      grid_y_size_(grid_y_size) {}
+    : kFeatureNum_(feature_num),
+      kGridXSize_(grid_x_size),
+      kGridYSize_(grid_y_size) {}
 
 void ScatterCuda::DoScatterCuda(const int pillar_count, int *dev_pillar_coors,
                                 float *pfe_feature, float *scattered_feature) {
-  scatter_kernel<<<pillar_count, feature_num_>>>(
-      dev_pillar_coors, pfe_feature, scattered_feature, feature_num_,
-      grid_x_size_, grid_y_size_);
+  scatter_kernel<<<pillar_count, kFeatureNum_>>>(
+      dev_pillar_coors, pfe_feature, scattered_feature, kFeatureNum_,
+      kGridXSize_, kGridYSize_);
 }

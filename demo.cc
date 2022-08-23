@@ -131,7 +131,7 @@ void test(void) {
   std::cout << "config: " << model_config << std::endl;
   std::cout << "data: " << file_name << std::endl;
 
-  CenterPoint cp(config["UseOnnx"].as<bool>(), pfe_file, backbone_file, model_config);
+  CenterPoint cp(config, pfe_file, backbone_file, model_config);
 
   float *points_array;
   int in_num_points;
@@ -140,7 +140,7 @@ void test(void) {
                  config["UseDim"].as<int>());
   std::cout << "num points: " << in_num_points << std::endl;
 
-  for (int _ = 0; _ < 4; _++) {
+  for (int _ = 0; _ < 2; _++) {
     std::vector<Box> out_detections;
     cudaDeviceSynchronize();
     cp.DoInference(points_array, in_num_points, out_detections);

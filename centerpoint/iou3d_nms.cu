@@ -1,7 +1,7 @@
 /*
 3D IoU Calculation and Rotated NMS(modified from 2D NMS written by others)
 Written by Shaoshuai Shi
-All Rights Reserved 2019-2020.
+All Rights Reserved 2019-2022.
 */
 #include <stdio.h>
 #include <thrust/count.h>
@@ -15,6 +15,7 @@ All Rights Reserved 2019-2020.
 #include <iostream>
 #include <vector>
 
+#include "common.h"
 #include "iou3d_nms.h"
 
 struct Point {

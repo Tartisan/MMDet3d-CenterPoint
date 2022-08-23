@@ -37,7 +37,6 @@
 
 #pragma once
 
-// headers in STL
 #include <assert.h>
 #include <stdio.h>
 
@@ -45,10 +44,9 @@
 #include <iostream>
 #include <string>
 #include <vector>
-// headers in CUDA
+
 #include "cuda_runtime_api.h"
 
-using namespace std;
 // using MACRO to allocate memory inside CUDA kernel
 #define NUM_3D_BOX_CORNERS 8
 #define NUM_2D_BOX_CORNERS 4
@@ -69,52 +67,24 @@ inline void GPUAssert(cudaError_t code, const char *file, int line,
 };
 
 template <typename T>
-void HOST_SAVE(T *array, int size, string filename,
-               string root = "../", string postfix = ".txt") {
-  string filepath = root + "/" + filename + postfix;
-  if (postfix == ".bin") {
-    fstream file(filepath, ios::out | ios::binary);
-    file.write(reinterpret_cast<char *>(array), sizeof(size * sizeof(T)));
-    file.close();
-    std::cout << "|>>>|  Data has been written in " << filepath << "  |<<<|"
-              << std::endl;
-    return;
-  } else if (postfix == ".txt") {
-    ofstream file(filepath, ios::out);
-    for (int i = 0; i < size; ++i) file << array[i] << " ";
-    file.close();
-    std::cout << "|>>>|  Data has been written in " << filepath << "  |<<<|"
-              << std::endl;
-    return;
+void HOST_SAVE(T *array, int row, int col, std::string filename) {
+  std::ofstream out_file(filename, std::ios::out);
+  if (out_file.is_open()) {
+    for (int i = 0; i < row; ++i) {
+      for (int j = 0; j < col; ++j) {
+        out_file << array[i * col + j] << " ";
+      }
+      out_file << "\n";
+    }
   }
+  out_file.close();
+  std::cout << "Data has been written in " << filename << std::endl;
 };
 
 template <typename T>
-void DEVICE_SAVE(T *array, int size, string filename,
-                 string root = "../", string postfix = ".txt") {
-  T *temp_ = new T[size];
-  cudaMemcpy(temp_, array, size * sizeof(T), cudaMemcpyDeviceToHost);
-  HOST_SAVE<T>(temp_, size, filename, root, postfix);
+void DEVICE_SAVE(T *array, int row, int col, std::string filename) {
+  T *temp_ = new T[row * col];
+  cudaMemcpy(temp_, array, row * col * sizeof(T), cudaMemcpyDeviceToHost);
+  HOST_SAVE<T>(temp_, row, col, filename);
   delete[] temp_;
 };
-
-// int TXTtoArrary(float *&points_array, string file_name, int num_feature = 4) {
-//   ifstream InFile;
-//   InFile.open(file_name.data());
-//   assert(InFile.is_open());
-
-//   vector<float> temp_points;
-//   string c;
-
-//   while (!InFile.eof()) {
-//     InFile >> c;
-//     temp_points.push_back(atof(c.c_str()));
-//   }
-//   points_array = new float[temp_points.size()];
-//   for (int i = 0; i < temp_points.size(); ++i) {
-//     points_array[i] = temp_points[i];
-//   }
-
-//   InFile.close();
-//   return temp_points.size() / num_feature;
-// };

@@ -35,7 +35,6 @@
 #include <memory>
 #include <vector>
 
-#include "common.h"
 #include "iou3d_nms.h"
 
 struct Box {
@@ -60,7 +59,9 @@ class PostprocessCuda {
                   const int nms_post_maxsize, const int out_size_factor,
                   const int output_h, const int output_w,
                   const float pillar_x_size, const float pillar_y_size,
-                  const int min_x_range, const int min_y_range);
+                  const int min_x_range, const int min_y_range, 
+                  const std::map<std::string, int> &kHeadDict, 
+                  const std::vector<int> &kClassNumInTask);
   ~PostprocessCuda();
 
   void DoPostprocessCuda(float* box_preds, float* scores, float* dir_scores,
@@ -80,10 +81,8 @@ class PostprocessCuda {
   const float kMinXRange_;
   const float kMinYRange_;
 
-  // Todo: parameters to yaml
-  std::map<std::string, int> head_dict_{
-      {"reg", 2}, {"height", 1}, {"dim", 3}, {"rot", 2}};
-  const std::vector<int> kClassNumInTask_{1, 1, 2};
+  std::map<std::string, int> kHeadDict_;
+  std::vector<int> kClassNumInTask_;
 
   std::unique_ptr<Iou3dNmsCuda> nms_cuda_ptr_;
 

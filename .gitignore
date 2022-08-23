@@ -1,4 +1,6 @@
 .vscode/
+Makefile
 build/
 __pycache__
 *.onnx.cache
+debug/

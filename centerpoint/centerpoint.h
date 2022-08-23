@@ -91,7 +91,7 @@ class Logger : public nvinfer1::ILogger {
 
 class CenterPoint {
  public:
-  CenterPoint(const bool use_onnx, const std::string pfe_file,
+  CenterPoint(const YAML::Node &config, const std::string pfe_file,
               const std::string backbone_file, const std::string model_config);
 
   ~CenterPoint();
@@ -118,54 +118,52 @@ class CenterPoint {
   void Preprocess(const float *in_points_array, const int in_num_points);
 
  private:
-  // voxel size
+  bool enable_debug_ = false;
+  std::string trt_mode_ = "fp32";
+
   float kPillarXSize;
   float kPillarYSize;
   float kPillarZSize;
-  // point cloud range
   float kMinXRange;
   float kMinYRange;
   float kMinZRange;
   float kMaxXRange;
   float kMaxYRange;
   float kMaxZRange;
-  // hyper parameters
+  int kGridXSize;
+  int kGridYSize;
+  int kGridZSize;
   int kNumClass;
   int kMaxNumPillars;
   int kMaxNumPointsPerPillar;
   // if you need to change this, watch the gather_point_feature_kernel func in
-  // preprocess
   int kNumPointFeature = 4;  // [x, y, z, i]
   int kNumThreads = 64;      // also used for number of scattered feature
   int kNumGatherPointFeature = 10;
 
-  int kGridXSize;
-  int kGridYSize;
-  int kGridZSize;
   int kPfeChannels = kNumThreads;
   int kBackboneInputSize;
   int kBatchSize;
   int kNmsPreMaxsize;
   int kNmsPostMaxsize;
+  float kScoreThresh;
+  float kNmsOverlapThresh;
+  int kOutSizeFactor;
+  int kHeadXSize;
+  int kHeadYSize;
 
-  // preprocess
   int host_pillar_count_[1];
+
   float *dev_num_points_per_pillar_;
   float *dev_pillar_point_feature_;
   int *dev_pillar_coors_;
   float *dev_pfe_gather_feature_;
-  // pfe
   void *pfe_buffers_[2];
-  // scatter
   float *dev_scattered_feature_;
-  // backbone
-  int kOutSizeFactor;
-  int kHeadXSize;
-  int kHeadYSize;
   void *backbone_buffers_[4];
-  // postprocess
-  float score_thresh_;
-  float nms_overlap_thresh_;
+
+  std::map<std::string, int> kHeadDict;
+  std::vector<int> kClassNumInTask;
 
   std::unique_ptr<PreprocessPointsCuda> preprocess_points_cuda_ptr_;
   std::unique_ptr<ScatterCuda> scatter_cuda_ptr_;

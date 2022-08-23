@@ -30,9 +30,11 @@ MODEL:
         USE_ABSLOTE_XYZ: True
         USE_NORM: True
         NUM_FILTERS: [ 64, 64 ]
+    
     MAP_TO_BEV:
         NAME: PointPillarScatter
         NUM_BEV_FEATURES: 64
+
     BACKBONE_2D:
         NAME: BaseBEVBackbone
         LAYER_NUMS: [ 3, 5, 5 ]
@@ -40,6 +42,7 @@ MODEL:
         NUM_FILTERS: [ 64, 128, 256 ]
         UPSAMPLE_STRIDES: [ 0.5, 1, 2 ]
         NUM_UPSAMPLE_FILTERS: [ 128, 128, 128 ]
+
     DENSE_HEAD:
         NAME: CenterHead
         OUT_SIZE_FACTOR: 4
@@ -71,6 +74,7 @@ MODEL:
                 'loc_weight': 2.0,
                 'code_weights': [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0]
             }
+    
     POST_PROCESSING:
         NMS_CONFIG:
             MULTI_CLASSES_NMS: False
