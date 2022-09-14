@@ -45,7 +45,7 @@ MODEL:
 
     DENSE_HEAD:
         NAME: CenterHead
-        OUT_SIZE_FACTOR: 4
+        DOWNSAMPLE_SIZE: 4
         CLASS_AGNOSTIC: False
         CLASS_NAMES_EACH_HEAD: [
             ['Car'],

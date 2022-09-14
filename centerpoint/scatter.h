@@ -58,7 +58,8 @@ class ScatterCuda {
    * @param[in] grid_y_size Number of pillars in y-coordinate
    * @details Captital variables never change after the compile
    */
-  ScatterCuda(const int num_threads, const int grid_x_size,
+  ScatterCuda(const int num_threads, 
+              const int grid_x_size,
               const int grid_y_size);
 
   /**
@@ -67,15 +68,17 @@ class ScatterCuda {
    * @param[in] x_coors X-coordinate indexes for corresponding pillars
    * @param[in] y_coors Y-coordinate indexes for corresponding pillars
    * @param[in] pfe_output Output from Pillar Feature Extractor
-   * @param[out] scattered_feature Gridmap representation for pillars' feature
+   * @param[out] canvas_feature Gridmap representation for pillars' feature
    * @details Allocate pillars in gridmap based on index(coordinates)
    * information
    */
-  void DoScatterCuda(const int pillar_count, int* dev_pillar_coors,
-                     float* pfe_feature, float* scattered_feature);
+  void DoScatterCuda(const int pillar_count, 
+                     const int* dev_pillar_coors,
+                     const float* pfe_feature, 
+                     float* canvas_feature);
 
  private:
-  const int kFeatureNum_;
-  const int kGridXSize_;
-  const int kGridYSize_;
+  int feature_num_;
+  int grid_x_size_;
+  int grid_y_size_;
 };

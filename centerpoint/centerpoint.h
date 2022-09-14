@@ -31,10 +31,7 @@
  */
 #pragma once
 
-// headers in STL
 #include <assert.h>
-#include <yaml-cpp/yaml.h>
-
 #include <algorithm>
 #include <cmath>
 #include <fstream>
@@ -46,7 +43,8 @@
 #include <sstream>
 #include <string>
 #include <vector>
-// headers in TensorRT
+#include <yaml-cpp/yaml.h>
+
 #include "NvInfer.h"
 #include "NvInferPlugin.h"
 #include "NvOnnxParser.h"
@@ -121,49 +119,53 @@ class CenterPoint {
   bool enable_debug_ = false;
   std::string trt_mode_ = "fp32";
 
-  float kPillarXSize;
-  float kPillarYSize;
-  float kPillarZSize;
-  float kMinXRange;
-  float kMinYRange;
-  float kMinZRange;
-  float kMaxXRange;
-  float kMaxYRange;
-  float kMaxZRange;
-  int kGridXSize;
-  int kGridYSize;
-  int kGridZSize;
-  int kNumClass;
-  int kMaxNumPillars;
-  int kMaxNumPointsPerPillar;
-  // if you need to change this, watch the gather_point_feature_kernel func in
-  int kNumPointFeature = 4;  // [x, y, z, i]
-  int kNumThreads = 64;      // also used for number of scattered feature
-  int kNumGatherPointFeature = 10;
+  const int kBatchSize = 1;
+  const int point_feature_dim_ = 4;  // [x, y, z, i]
+  const int voxel_feature_dim_ = 10;
+  const int pillar_feature_dim_ = 64;
+  
+  float pillar_x_size_;
+  float pillar_y_size_;
+  float pillar_z_size_;
+  float min_x_range_;
+  float min_y_range_;
+  float min_z_range_;
+  float max_x_range_;
+  float max_y_range_;
+  float max_z_range_;
+  int grid_x_size_;
+  int grid_y_size_;
+  int grid_z_size_;
+  int num_classes_;
+  int max_voxel_num_;
+  int max_points_in_voxel_;
 
-  int kPfeChannels = kNumThreads;
-  int kBackboneInputSize;
-  int kBatchSize;
-  int kNmsPreMaxsize;
-  int kNmsPostMaxsize;
-  float kScoreThresh;
-  float kNmsOverlapThresh;
-  int kOutSizeFactor;
-  int kHeadXSize;
-  int kHeadYSize;
+  int backbone_input_size_;
+  int downsample_size_;
+  int head_x_size_;
+  int head_y_size_;
+  int nms_pre_max_size_;
+  int nms_post_max_size_;
+  float score_thresh_;
+  float nms_overlap_thresh_;
+
+  int backbone_map_size_;
+  int head_map_size_;
+  std::map<std::string, int> head_map_;
+  std::vector<int> num_classes_in_task_;
+  int num_tasks_;
+  int box_range_;
+  int cls_range_;
+  int dir_range_;
 
   int host_pillar_count_[1];
-
-  int *dev_num_points_per_pillar_;
+  int *dev_num_points_in_voxel_;
   float *dev_pillar_point_feature_;
   int *dev_pillar_coors_;
-  float *dev_pfe_gather_feature_;
+  float *dev_voxel_feature_;
   void *pfe_buffers_[2];
-  float *dev_scattered_feature_;
+  float *dev_canvas_feature_;
   void *backbone_buffers_[4];
-
-  std::map<std::string, int> kHeadDict;
-  std::vector<int> kClassNumInTask;
 
   std::unique_ptr<PreprocessPointsCuda> preprocess_points_cuda_ptr_;
   std::unique_ptr<ScatterCuda> scatter_cuda_ptr_;

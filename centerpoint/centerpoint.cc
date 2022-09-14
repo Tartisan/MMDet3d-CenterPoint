@@ -41,66 +41,44 @@ using std::chrono::high_resolution_clock;
 
 void CenterPoint::InitParams(const std::string model_config) {
   YAML::Node params = YAML::LoadFile(model_config);
-  // pillar
-  kPillarXSize =
-      params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["VOXEL_SIZE"][0].as<float>();
-  kPillarYSize =
-      params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["VOXEL_SIZE"][1].as<float>();
-  kPillarZSize =
-      params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["VOXEL_SIZE"][2].as<float>();
-  kMinXRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][0].as<float>();
-  kMinYRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][1].as<float>();
-  kMinZRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][2].as<float>();
-  kMaxXRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][3].as<float>();
-  kMaxYRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][4].as<float>();
-  kMaxZRange = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][5].as<float>();
-  kGridXSize =
-      static_cast<int>((kMaxXRange - kMinXRange) / kPillarXSize);  // 800
-  kGridYSize =
-      static_cast<int>((kMaxYRange - kMinYRange) / kPillarYSize);  // 800
-  kGridZSize = static_cast<int>((kMaxZRange - kMinZRange) / kPillarZSize);  // 1
-  assert(1 == kGridZSize);
-  kMaxNumPillars =
-      params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["MAX_NUMBER_OF_VOXELS"]["test"]
-          .as<int>();
-  kMaxNumPointsPerPillar =
-      params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["MAX_POINTS_PER_VOXEL"]
-          .as<int>();
+  min_x_range_ = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][0].as<float>();
+  min_y_range_ = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][1].as<float>();
+  min_z_range_ = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][2].as<float>();
+  max_x_range_ = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][3].as<float>();
+  max_y_range_ = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][4].as<float>();
+  max_z_range_ = params["DATA_CONFIG"]["POINT_CLOUD_RANGE"][5].as<float>();
+  pillar_x_size_ = params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["VOXEL_SIZE"][0].as<float>();
+  pillar_y_size_ = params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["VOXEL_SIZE"][1].as<float>();
+  pillar_z_size_ = params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["VOXEL_SIZE"][2].as<float>();
+  max_voxel_num_ = params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["MAX_NUMBER_OF_VOXELS"]["test"].as<int>();
+  max_points_in_voxel_ = params["DATA_CONFIG"]["DATA_PROCESSOR"][2]["MAX_POINTS_PER_VOXEL"].as<int>();
+  num_classes_ = params["CLASS_NAMES"].size();
+  nms_pre_max_size_ =params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_PRE_MAXSIZE"].as<int>();
+  nms_post_max_size_ = params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_POST_MAXSIZE"].as<int>();
+  score_thresh_ = params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["SCORE_THRESH"].as<float>();
+  nms_overlap_thresh_ = params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_THRESH"].as<float>();
+  downsample_size_ = params["MODEL"]["DENSE_HEAD"]["DOWNSAMPLE_SIZE"].as<int>();
 
-  // postprocess
-  kNumClass = params["CLASS_NAMES"].size();
-  kBatchSize = 1;
-  kNmsPreMaxsize =
-      params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_PRE_MAXSIZE"]
-          .as<int>();
-  kNmsPostMaxsize =
-      params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_POST_MAXSIZE"]
-          .as<int>();
-  kScoreThresh =
-      params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["SCORE_THRESH"]
-          .as<float>();
-  kNmsOverlapThresh =
-      params["MODEL"]["POST_PROCESSING"]["NMS_CONFIG"]["NMS_THRESH"]
-          .as<float>();
-
-  kBackboneInputSize = kPfeChannels * kGridYSize * kGridXSize;
-
-  kOutSizeFactor = params["MODEL"]["DENSE_HEAD"]["OUT_SIZE_FACTOR"].as<int>();
-  kHeadXSize = kGridXSize / kOutSizeFactor;
-  kHeadYSize = kGridYSize / kOutSizeFactor;
+  grid_x_size_ = static_cast<int>((max_x_range_ - min_x_range_) / pillar_x_size_);
+  grid_y_size_ = static_cast<int>((max_y_range_ - min_y_range_) / pillar_y_size_);
+  grid_z_size_ = static_cast<int>((max_z_range_ - min_z_range_) / pillar_z_size_);
+  assert(1 == grid_z_size_);
+  head_x_size_ = grid_x_size_ / downsample_size_;
+  head_y_size_ = grid_y_size_ / downsample_size_;
+  head_map_size_ = head_x_size_ * head_y_size_;
+  backbone_map_size_ = grid_y_size_ * grid_x_size_;
 
   std::vector<std::string> head_names{"reg", "height", "dim", "rot"};
   for (auto name : head_names) {
-    kHeadDict[name] = params["MODEL"]["DENSE_HEAD"]["SEPARATE_HEAD_CFG"]
-                            ["HEAD_DICT"][name]["out_channels"]
-                                .as<int>();
+    head_map_[name] = params["MODEL"]["DENSE_HEAD"]["SEPARATE_HEAD_CFG"]["HEAD_DICT"][name]["out_channels"].as<int>();
   }
-  size_t num_task =
-      params["MODEL"]["DENSE_HEAD"]["CLASS_NAMES_EACH_HEAD"].size();
-  for (size_t i = 0; i < num_task; ++i) {
-    kClassNumInTask.push_back(
-        params["MODEL"]["DENSE_HEAD"]["CLASS_NAMES_EACH_HEAD"][i].size());
+  num_tasks_ = params["MODEL"]["DENSE_HEAD"]["CLASS_NAMES_EACH_HEAD"].size();
+  for (int i = 0; i < num_tasks_; ++i) {
+    num_classes_in_task_.push_back(params["MODEL"]["DENSE_HEAD"]["CLASS_NAMES_EACH_HEAD"][i].size());
   }
+  box_range_ = head_map_["reg"] + head_map_["height"] + head_map_["dim"];
+  cls_range_ = num_classes_;
+  dir_range_ = head_map_["rot"];
 }
 
 CenterPoint::CenterPoint(const YAML::Node &config, const std::string pfe_file,
@@ -114,84 +92,57 @@ CenterPoint::CenterPoint(const YAML::Node &config, const std::string pfe_file,
   DeviceMemoryMalloc();
 
   preprocess_points_cuda_ptr_.reset(new PreprocessPointsCuda(
-      kNumThreads, kMaxNumPillars, kMaxNumPointsPerPillar, kNumPointFeature,
-      kGridXSize, kGridYSize, kGridZSize, kPillarXSize, kPillarYSize,
-      kPillarZSize, kMinXRange, kMinYRange, kMinZRange, kMaxXRange, kMaxYRange,
-      kMaxZRange));
+      max_voxel_num_, max_points_in_voxel_, point_feature_dim_,
+      grid_x_size_, grid_y_size_, grid_z_size_, 
+      pillar_x_size_, pillar_y_size_,pillar_z_size_, 
+      min_x_range_, min_y_range_, min_z_range_, 
+      max_x_range_, max_y_range_,max_z_range_));
 
   scatter_cuda_ptr_.reset(
-      new ScatterCuda(kPfeChannels, kGridXSize, kGridYSize));
+      new ScatterCuda(pillar_feature_dim_, grid_x_size_, grid_y_size_));
 
   postprocess_cuda_ptr_.reset(new PostprocessCuda(
-      kNumClass, kScoreThresh, kNmsOverlapThresh, kNmsPreMaxsize,
-      kNmsPostMaxsize, kOutSizeFactor, kHeadXSize, kHeadYSize, kPillarXSize,
-      kPillarYSize, kMinXRange, kMinYRange, kHeadDict, kClassNumInTask));
+      num_classes_, score_thresh_, nms_overlap_thresh_, nms_pre_max_size_,
+      nms_post_max_size_, downsample_size_, head_x_size_, head_y_size_, pillar_x_size_,
+      pillar_y_size_, min_x_range_, min_y_range_, head_map_, num_classes_in_task_));
 }
 
 void CenterPoint::DeviceMemoryMalloc() {
   // voxelize
-  GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_num_points_per_pillar_),
-                       kMaxNumPillars * sizeof(int)));  // M
-  GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_pillar_point_feature_),
-                       kMaxNumPillars * kMaxNumPointsPerPillar *
-                           kNumPointFeature * sizeof(float)));  // [M , m , 4]
-  GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_pillar_coors_),
-                       kMaxNumPillars * 4 * sizeof(int)));  // [M , 4]
-
-  GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_pfe_gather_feature_),
-                       kMaxNumPillars * kMaxNumPointsPerPillar *
-                           kNumGatherPointFeature * sizeof(float)));
+  GPU_CHECK(cudaMalloc((void**)&dev_num_points_in_voxel_, max_voxel_num_ * sizeof(int)));
+  GPU_CHECK(cudaMalloc((void**)&dev_pillar_point_feature_, max_voxel_num_ * max_points_in_voxel_ * point_feature_dim_ * sizeof(float)));
+  GPU_CHECK(cudaMalloc((void**)&dev_pillar_coors_, max_voxel_num_ * 4 * sizeof(int)));
+  GPU_CHECK(cudaMalloc((void**)&dev_voxel_feature_, max_voxel_num_ * max_points_in_voxel_ * voxel_feature_dim_ * sizeof(float)));
   // pillar feature encoder
-  GPU_CHECK(
-      cudaMalloc(&pfe_buffers_[0], kMaxNumPillars * kMaxNumPointsPerPillar *
-                                       kNumGatherPointFeature * sizeof(float)));
-  GPU_CHECK(cudaMalloc(&pfe_buffers_[1],
-                       kMaxNumPillars * kPfeChannels * sizeof(float)));
+  GPU_CHECK(cudaMalloc(&pfe_buffers_[0], max_voxel_num_ * max_points_in_voxel_ * voxel_feature_dim_ * sizeof(float)));
+  GPU_CHECK(cudaMalloc(&pfe_buffers_[1], max_voxel_num_ * pillar_feature_dim_ * sizeof(float)));
   // scatter
-  GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_scattered_feature_),
-                       kPfeChannels * kGridYSize * kGridXSize * sizeof(float)));
+  GPU_CHECK(cudaMalloc((void**)&dev_canvas_feature_, pillar_feature_dim_ * grid_y_size_ * grid_x_size_ * sizeof(float)));
   // backbone
-  GPU_CHECK(
-      cudaMalloc(&backbone_buffers_[0], kBackboneInputSize * sizeof(float)));
+  GPU_CHECK(cudaMalloc(&backbone_buffers_[0], pillar_feature_dim_ * backbone_map_size_ * sizeof(float)));
   /// bbox_preds
-  GPU_CHECK(cudaMalloc(&backbone_buffers_[1],
-                       18 * kHeadXSize * kHeadYSize * sizeof(float)));
+  GPU_CHECK(cudaMalloc(&backbone_buffers_[1], num_tasks_ * box_range_ * head_map_size_ * sizeof(float)));
   /// scores
-  GPU_CHECK(cudaMalloc(&backbone_buffers_[2],
-                       kNumClass * kHeadXSize * kHeadYSize * sizeof(float)));
+  GPU_CHECK(cudaMalloc(&backbone_buffers_[2], cls_range_ * head_map_size_ * sizeof(float)));
   /// dir_scores
-  GPU_CHECK(cudaMalloc(&backbone_buffers_[3],
-                       6 * kHeadXSize * kHeadYSize * sizeof(float)));
+  GPU_CHECK(cudaMalloc(&backbone_buffers_[3], num_tasks_ * dir_range_ * head_map_size_ * sizeof(float)));
 }
 
 void CenterPoint::SetDeviceMemoryToZero() {
-  GPU_CHECK(cudaMemset(dev_num_points_per_pillar_, 0,
-                       kMaxNumPillars * sizeof(int)));
-  GPU_CHECK(cudaMemset(dev_pillar_point_feature_, 0,
-                       kMaxNumPillars * kMaxNumPointsPerPillar *
-                           kNumPointFeature * sizeof(float)));
-  GPU_CHECK(cudaMemset(dev_pillar_coors_, 0, kMaxNumPillars * 4 * sizeof(int)));
+  GPU_CHECK(cudaMemset(dev_num_points_in_voxel_, 0, max_voxel_num_ * sizeof(int)));
+  GPU_CHECK(cudaMemset(dev_pillar_point_feature_, 0, max_voxel_num_ * max_points_in_voxel_ * point_feature_dim_ * sizeof(float)));
+  GPU_CHECK(cudaMemset(dev_pillar_coors_, 0, max_voxel_num_ * 4 * sizeof(int)));
 
-  GPU_CHECK(cudaMemset(dev_pfe_gather_feature_, 0,
-                       kMaxNumPillars * kMaxNumPointsPerPillar *
-                           kNumGatherPointFeature * sizeof(float)));
-  GPU_CHECK(cudaMemset(pfe_buffers_[0], 0,
-                       kMaxNumPillars * kMaxNumPointsPerPillar *
-                           kNumGatherPointFeature * sizeof(float)));
-  GPU_CHECK(cudaMemset(pfe_buffers_[1], 0,
-                       kMaxNumPillars * kPfeChannels * sizeof(float)));
+  GPU_CHECK(cudaMemset(dev_voxel_feature_, 0,max_voxel_num_ * max_points_in_voxel_ * voxel_feature_dim_ * sizeof(float)));
+  GPU_CHECK(cudaMemset(pfe_buffers_[0], 0, max_voxel_num_ * max_points_in_voxel_ * voxel_feature_dim_ * sizeof(float)));
+  GPU_CHECK(cudaMemset(pfe_buffers_[1], 0, max_voxel_num_ * pillar_feature_dim_ * sizeof(float)));
 
-  GPU_CHECK(cudaMemset(dev_scattered_feature_, 0,
-                       kPfeChannels * kGridYSize * kGridXSize * sizeof(float)));
+  GPU_CHECK(cudaMemset(dev_canvas_feature_, 0, pillar_feature_dim_ * grid_y_size_ * grid_x_size_ * sizeof(float)));
 
-  GPU_CHECK(
-      cudaMemset(backbone_buffers_[0], 0, kBackboneInputSize * sizeof(float)));
-  GPU_CHECK(cudaMemset(backbone_buffers_[1], 0,
-                       18 * kHeadXSize * kHeadYSize * sizeof(float)));
-  GPU_CHECK(cudaMemset(backbone_buffers_[2], 0,
-                       kNumClass * kHeadXSize * kHeadYSize * sizeof(float)));
-  GPU_CHECK(cudaMemset(backbone_buffers_[3], 0,
-                       6 * kHeadXSize * kHeadYSize * sizeof(float)));
+  GPU_CHECK(cudaMemset(backbone_buffers_[0], 0, pillar_feature_dim_ * backbone_map_size_ * sizeof(float)));
+  GPU_CHECK(cudaMemset(backbone_buffers_[1], 0, num_tasks_ * box_range_ * head_map_size_ * sizeof(float)));
+  GPU_CHECK(cudaMemset(backbone_buffers_[2], 0, cls_range_ * head_map_size_ * sizeof(float)));
+  GPU_CHECK(cudaMemset(backbone_buffers_[3], 0, num_tasks_ * dir_range_ * head_map_size_ * sizeof(float)));
 }
 
 void CenterPoint::InitTRT(const bool use_onnx, const std::string pfe_file,
@@ -215,9 +166,8 @@ void CenterPoint::InitTRT(const bool use_onnx, const std::string pfe_file,
   }
 }
 
-void CenterPoint::OnnxToTRTModel(
-    const std::string &model_file,  // name of the onnx model
-    nvinfer1::ICudaEngine **engine_ptr) {
+void CenterPoint::OnnxToTRTModel(const std::string &model_file,
+                                 nvinfer1::ICudaEngine **engine_ptr) {
   std::string model_cache = model_file + ".cache";
   std::fstream trt_cache(model_cache, std::ifstream::in);
   if (!trt_cache.is_open()) {
@@ -227,8 +177,7 @@ void CenterPoint::OnnxToTRTModel(
         static_cast<uint32_t>(kBatchSize) << static_cast<uint32_t>(
             nvinfer1::NetworkDefinitionCreationFlag::kEXPLICIT_BATCH);
     nvinfer1::IBuilder *builder = nvinfer1::createInferBuilder(g_logger_);
-    nvinfer1::INetworkDefinition *network =
-        builder->createNetworkV2(explicit_batch);
+    nvinfer1::INetworkDefinition *network = builder->createNetworkV2(explicit_batch);
 
     // parse onnx model
     int verbosity = static_cast<int>(nvinfer1::ILogger::Severity::kWARNING);
@@ -249,8 +198,7 @@ void CenterPoint::OnnxToTRTModel(
       std::cout << "the platform supports Fp16, use Fp16." << std::endl;
       config->setFlag(nvinfer1::BuilderFlag::kFP16);
     }
-    nvinfer1::ICudaEngine *engine =
-        builder->buildEngineWithConfig(*network, *config);
+    nvinfer1::ICudaEngine *engine = builder->buildEngineWithConfig(*network, *config);
     if (engine == nullptr) {
       std::cerr << ": engine init null!" << std::endl;
       exit(-1);
@@ -331,8 +279,7 @@ void CenterPoint::EngineToTRTModel(const std::string &engine_file,
   void *modelMem = malloc(modelSize);
   gieModelStream.read((char *)modelMem, modelSize);
 
-  nvinfer1::ICudaEngine *engine =
-      runtime->deserializeCudaEngine(modelMem, modelSize, NULL);
+  nvinfer1::ICudaEngine *engine = runtime->deserializeCudaEngine(modelMem, modelSize, NULL);
   if (engine == nullptr) {
     std::string msg("failed to build engine parser");
     g_logger_.log(nvinfer1::ILogger::Severity::kERROR, msg.c_str());
@@ -356,76 +303,69 @@ void CenterPoint::DoInference(const float *in_points_array,
   // [STEP 1] : load pointcloud
   auto load_start = high_resolution_clock::now();
   float *dev_points;
-  GPU_CHECK(cudaMalloc(reinterpret_cast<void **>(&dev_points),
-                       in_num_points * kNumPointFeature * sizeof(float)));
-  GPU_CHECK(cudaMemcpy(dev_points, in_points_array,
-                       in_num_points * kNumPointFeature * sizeof(float),
-                       cudaMemcpyHostToDevice));
+  GPU_CHECK(cudaMalloc((void**)&dev_points, in_num_points * point_feature_dim_ * sizeof(float)));
+  GPU_CHECK(cudaMemcpy(dev_points, in_points_array, in_num_points * point_feature_dim_ * sizeof(float), cudaMemcpyHostToDevice));
   auto load_end = high_resolution_clock::now();
 
   // [STEP 2] : preprocess
   auto preprocess_start = high_resolution_clock::now();
   host_pillar_count_[0] = 0;
-  preprocess_points_cuda_ptr_->DoPreprocessPointsCuda(
-      dev_points, in_num_points, dev_num_points_per_pillar_,
-      dev_pillar_point_feature_, dev_pillar_coors_, host_pillar_count_,
-      dev_pfe_gather_feature_);
+  preprocess_points_cuda_ptr_->DoPreprocessPointsCuda(dev_points, 
+                                                      in_num_points, 
+                                                      dev_num_points_in_voxel_, 
+                                                      dev_pillar_point_feature_, 
+                                                      dev_pillar_coors_, 
+                                                      host_pillar_count_,
+                                                      dev_voxel_feature_);
   cudaDeviceSynchronize();
   auto preprocess_end = high_resolution_clock::now();
   if (enable_debug_) {
-    DEVICE_SAVE<float>(dev_pfe_gather_feature_, kMaxNumPillars,
-                       kMaxNumPointsPerPillar * kNumGatherPointFeature,
-                       "00_pfe_gather_feature.txt");
-    DEVICE_SAVE<float>(dev_pfe_gather_feature_, kMaxNumPillars, 1,
-                       "01_num_points_per_pillar.txt");
-    DEVICE_SAVE<int>(dev_pillar_coors_, kMaxNumPillars, 4,
-                     "02_pillar_coors.txt");
+    DEVICE_SAVE<float>(dev_voxel_feature_, max_voxel_num_, max_points_in_voxel_ * voxel_feature_dim_, 
+                       "00_voxel_feature.txt");
+    DEVICE_SAVE<int>(dev_num_points_in_voxel_, max_voxel_num_, 1, "01_num_points_in_voxel.txt");
+    DEVICE_SAVE<int>(dev_pillar_coors_, max_voxel_num_, 4, "02_voxel_coors.txt");
   }
 
   // [STEP 3] : pfe forward
   cudaStream_t stream;
   GPU_CHECK(cudaStreamCreate(&stream));
   auto pfe_start = high_resolution_clock::now();
-  GPU_CHECK(cudaMemcpyAsync(pfe_buffers_[0], dev_pfe_gather_feature_,
-                            kMaxNumPillars * kMaxNumPointsPerPillar *
-                                kNumGatherPointFeature *
-                                sizeof(float),  /// kNumGatherPointFeature
+  GPU_CHECK(cudaMemcpyAsync(pfe_buffers_[0], dev_voxel_feature_, 
+                            max_voxel_num_ * max_points_in_voxel_ * voxel_feature_dim_ * sizeof(float), 
                             cudaMemcpyDeviceToDevice, stream));
   pfe_context_->enqueueV2(pfe_buffers_, stream, nullptr);
   cudaDeviceSynchronize();
   auto pfe_end = high_resolution_clock::now();
   if (enable_debug_) {
-    DEVICE_SAVE<float>(reinterpret_cast<float *>(pfe_buffers_[1]),
-                       kMaxNumPillars, kPfeChannels, "03_voxel_feature.txt");
+    DEVICE_SAVE<float>(reinterpret_cast<float *>(pfe_buffers_[1]), max_voxel_num_, pillar_feature_dim_, 
+                       "03_pillar_feature.txt");
   }
 
   // [STEP 4] : scatter pillar feature
   auto scatter_start = high_resolution_clock::now();
-  scatter_cuda_ptr_->DoScatterCuda(host_pillar_count_[0], dev_pillar_coors_,
+  scatter_cuda_ptr_->DoScatterCuda(host_pillar_count_[0],
+                                   dev_pillar_coors_,
                                    reinterpret_cast<float *>(pfe_buffers_[1]),
-                                   dev_scattered_feature_);
+                                   dev_canvas_feature_);
   cudaDeviceSynchronize();
   auto scatter_end = high_resolution_clock::now();
   if (enable_debug_) {
-    DEVICE_SAVE<float>(dev_scattered_feature_, kGridYSize * kGridXSize,
-                       kPfeChannels, "04_scattered_feature.txt");
+    DEVICE_SAVE<float>(dev_canvas_feature_, grid_y_size_ * grid_x_size_, pillar_feature_dim_, 
+                       "04_canvas_feature.txt");
   }
 
   // [STEP 5] : backbone forward
   auto backbone_start = high_resolution_clock::now();
-  GPU_CHECK(cudaMemcpyAsync(backbone_buffers_[0], dev_scattered_feature_,
-                            kBatchSize * kBackboneInputSize * sizeof(float),
+  GPU_CHECK(cudaMemcpyAsync(backbone_buffers_[0], dev_canvas_feature_,
+                            kBatchSize * pillar_feature_dim_ * backbone_map_size_ * sizeof(float),
                             cudaMemcpyDeviceToDevice, stream));
   backbone_context_->enqueueV2(backbone_buffers_, stream, nullptr);
   cudaDeviceSynchronize();
   auto backbone_end = high_resolution_clock::now();
   if (enable_debug_) {
-    DEVICE_SAVE<float>((float *)backbone_buffers_[1], kHeadXSize * kHeadYSize,
-                       18, "05_bbox_preds.txt");
-    DEVICE_SAVE<float>((float *)backbone_buffers_[2], kHeadXSize * kHeadYSize,
-                       4, "06_scores.txt");
-    DEVICE_SAVE<float>((float *)backbone_buffers_[3], kHeadXSize * kHeadYSize,
-                       6, "07_dir_scores.txt");
+    DEVICE_SAVE<float>((float *)backbone_buffers_[1], head_map_size_, num_tasks_ * box_range_, "05_bbox_preds.txt");
+    DEVICE_SAVE<float>((float *)backbone_buffers_[2], head_map_size_, cls_range_, "06_cls_scores.txt");
+    DEVICE_SAVE<float>((float *)backbone_buffers_[3], head_map_size_, num_tasks_ * dir_range_, "07_dir_scores.txt");
   }
 
   // [STEP 6]: postprocess
@@ -468,15 +408,15 @@ void CenterPoint::DoInference(const float *in_points_array,
 
 CenterPoint::~CenterPoint() {
   // pillars
-  GPU_CHECK(cudaFree(dev_num_points_per_pillar_));
+  GPU_CHECK(cudaFree(dev_num_points_in_voxel_));
   GPU_CHECK(cudaFree(dev_pillar_point_feature_));
   GPU_CHECK(cudaFree(dev_pillar_coors_));
   // pfe forward
-  GPU_CHECK(cudaFree(dev_pfe_gather_feature_));
+  GPU_CHECK(cudaFree(dev_voxel_feature_));
   GPU_CHECK(cudaFree(pfe_buffers_[0]));
   GPU_CHECK(cudaFree(pfe_buffers_[1]));
   // scatter
-  GPU_CHECK(cudaFree(dev_scattered_feature_));
+  GPU_CHECK(cudaFree(dev_canvas_feature_));
   // postprocess
   GPU_CHECK(cudaFree(backbone_buffers_[0]));
   GPU_CHECK(cudaFree(backbone_buffers_[1]));

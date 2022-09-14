@@ -33,43 +33,53 @@
 
 class PreprocessPointsCuda {
  public:
-  PreprocessPointsCuda(const int num_threads, const int num_point_feature,
-                       const int max_num_pillars,
-                       const int max_points_per_pillar, const int grid_x_size,
-                       const int grid_y_size, const int grid_z_size,
-                       const float pillar_x_size, const float pillar_y_size,
-                       const float pillar_z_size, const float min_x_range,
-                       const float min_y_range, const float min_z_range,
-                       const float max_x_range, const float max_y_range,
+  PreprocessPointsCuda(const int point_feature_dim,
+                       const int max_voxel_num,
+                       const int max_points_in_voxel, 
+                       const int grid_x_size,
+                       const int grid_y_size, 
+                       const int grid_z_size,
+                       const float pillar_x_size, 
+                       const float pillar_y_size,
+                       const float pillar_z_size, 
+                       const float min_x_range,
+                       const float min_y_range, 
+                       const float min_z_range,
+                       const float max_x_range, 
+                       const float max_y_range,
                        const float max_z_range);
   ~PreprocessPointsCuda();
 
-  void DoPreprocessPointsCuda(const float* dev_points, const int in_num_points,
-                              int* dev_num_points_per_pillar,
+  void DoPreprocessPointsCuda(const float* dev_points, 
+                              const int in_num_points,
+                              int* dev_num_points_in_voxel,
                               float* dev_pillar_point_feature,
-                              int* dev_pillar_coors, int* host_pillar_count,
-                              float* dev_pfe_gather_feature);
+                              int* dev_pillar_coors, 
+                              int* host_pillar_count,
+                              float* dev_voxel_feature);
 
- private:
-  const int kNumThreads_;
-  const int kMaxNumPillars_;
-  const int kMaxNumPointsPerPillar_;
-  const int kNumPointFeature_;
-  const int kGridXSize_;
-  const int kGridYSize_;
-  const int kGridZSize_;
-  const float kPillarXSize_;
-  const float kPillarYSize_;
-  const float kPillarZSize_;
-  const float kMinXRange_;
-  const float kMinYRange_;
-  const float kMinZRange_;
-  const float kMaxXRange_;
-  const float kMaxYRange_;
-  const float kMaxZRange_;
+ private:  
+  int max_voxel_num_;
+  int max_points_in_voxel_;
+  int point_feature_dim_;
+  int grid_x_size_;
+  int grid_y_size_;
+  int grid_z_size_;
+  float pillar_x_size_;
+  float pillar_y_size_;
+  float pillar_z_size_;
+  float min_x_range_;
+  float min_y_range_;
+  float min_z_range_;
+  float max_x_range_;
+  float max_y_range_;
+  float max_z_range_;
+  int map_size_;
 
   float* dev_pillar_point_feature_in_coors_;
-  int* mask_;
-  int* dev_pillar_count_;
+  int* pillar_count_histo_;
+  int* dev_pillar_num_;
   float* dev_points_mean_;
+
+  const int kNumThreads = 64;
 };

@@ -1,12 +1,12 @@
 import os
 import os.path as osp
 import numpy as np
-from mmdet3d.core.visualizer.open3d_vis import Visualizer
+from open3d_vis import Visualizer
 import yaml
 import argparse
 
 
-# http://www1.ynao.ac.cn/~jinhuahe/know_base/othertopics/computerissues/RGB_colortable.htm
+# https://www.rapidtables.com/web/color/RGB_Color.html
 PALETTE = [[30, 144, 255],  # dodger blue
            [0, 255, 255],   # 青色
            [255, 215, 0],   # 金黄色
@@ -41,7 +41,8 @@ def show_result_meshlab(vis,
     vis.o3d_visualizer.clear_geometries()
     vis.add_points(points)
     if gt_bboxes is not None:
-        vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(0, 0, 1))
+        vis.add_bboxes(bbox3d=gt_bboxes, bbox_color=(0, 1, 0), 
+                       points_in_box_color=(0.5, 0.5, 0.5))
     if pred_bboxes is not None:
         if pred_labels is None:
             vis.add_bboxes(bbox3d=pred_bboxes)
