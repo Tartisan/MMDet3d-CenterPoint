@@ -50,14 +50,14 @@ $ python viewer.py
 #### Performance in FP16
 
 ```
-| Function(unit:ms) | NVIDIA RTX A4000 Laptop GPU |
-| ----------------- | --------------------------- |
-| Preprocess        | 0.950476 ms                 |
-| Pfe               | 4.37507  ms                 |
-| Scatter           | 0.204093 ms                 |
-| Backbone          | 9.84435  ms                 |
-| Postprocess       | 2.91952  ms                 |
-| Summary           | 18.2961  ms                 |
+| Function(unit:ms) | NVIDIA RTX A4000 Laptop GPU | NVIDIA Jetson AGX Orin      |
+| ----------------- | --------------------------- | --------------------------- |
+| Preprocess        | 0.950476 ms                 | 3.52855  ms                 |
+| Pfe               | 4.37507  ms                 | 18.2881  ms                 |
+| Scatter           | 0.204093 ms                 | 1.33041  ms                 |
+| Backbone          | 9.84435  ms                 | 20.7511  ms                 |
+| Postprocess       | 2.91952  ms                 | 4.61471  ms                 |
+| Summary           | 18.2961  ms                 | 48.5218  ms                 |
 ```
 
 ## Note
